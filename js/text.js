@@ -88,6 +88,41 @@
     return { ikh: stem, du, er, mir: inf, ir: er, zey: inf };
   };
 
+  /* When a typed answer has the right letters but different marks, say exactly which and why. */
+  const MARK_RULES = [
+    [/^ו/, 'ו עם נקודה ({וּ}) נכתבת רק כשה־u צמוד ל־{וו} או בא לפני {י}: {וווּ, געוווּסט, פּרוּוון}. בכל מקום אחר u הוא {ו} רגילה: {צו, און, קומען}.'],
+    [/^א/, '{אַ} = a, {אָ} = o. {א} בלי סימן היא רק אל"ף שותקת בתחילת מילה, לפני {ו} או {י}.'],
+    [/^פ/, '{פּ} = p, {פֿ} = f. אין {פ} בלי סימן, חוץ מ־{ף} סופית.'],
+    [/^י/, '{ײַ} = ay, {יי} = ey. {יִ} בא רק כשה־i עומד ליד תנועה אחרת או ליד {י} עיצורית: {ייִדיש, רויִק}.'],
+    [/^[בכתש]/, 'במילים ממקור עברי: {בֿ} = v, {כּ} = k, {תּ} = t, {שׂ} = s. בלי סימן: {ב} = b, {כ} = kh, {ת} = s, {ש} = sh.'],
+  ];
+  Y.markDiff = (given, correct) => {
+    const units = (s) => {
+      const out = [];
+      for (const ch of Y.canon(s)) {
+        if (/[\u05B0-\u05C7]/.test(ch) && out.length) out[out.length - 1] += ch;
+        else out.push(ch);
+      }
+      return out;
+    };
+    const g = units(given);
+    const c = units(correct);
+    if (g.length !== c.length) return [];
+    const seen = new Set();
+    const msgs = [];
+    for (let i = 0; i < g.length; i++) {
+      if (g[i] === c[i] || g[i][0] !== c[i][0]) continue;
+      const rule = MARK_RULES.find(([re]) => re.test(c[i]));
+      const key = g[i] + '>' + c[i];
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const show = (x) => (x === 'י\u05B7' ? 'ײַ' : x);
+      const typed = c[i] === 'י\u05B7' && g[i] === 'י' ? 'יי' : show(g[i]);
+      msgs.push(`כתבת {${typed}}, בתקן כאן {${show(c[i])}}. ${rule ? rule[1] : ''}`);
+    }
+    return msgs.slice(0, 3);
+  };
+
   Y.shuffle = (arr) => {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {

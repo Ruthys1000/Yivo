@@ -111,10 +111,15 @@
       return `<div class="q-text">${esc(it.q).replace('___', inner)}</div>`;
     };
 
-    const feedback = (it, ok, shown, extra) => {
+    const describe = (it) => (it.t === 'h' ? 'מצאי את הטעות: ' + it.tokens.join(' ')
+      : it.t === 'o' ? 'בניית משפט: ' + it.he
+      : (it.he ? it.he + ' · ' : '') + (it.q || ''));
+
+    const feedback = (it, ok, shown, extra, given) => {
       S.answer(it, ok);
       log.push({ it, ok });
       const u = it.unit && !o.unitId ? unitById(it.unit) : null;
+      const ctx = { q: describe(it), given: given || '', correct: shown, ex: (it.ex || '').replace(/[{}]/g, ''), unit: u ? u.title.replace(/[{}]/g, '') : '' };
       const box = document.createElement('div');
       box.className = 'fb ' + (ok ? 'ok' : 'no');
       box.innerHTML = Y.disp(`
@@ -125,12 +130,75 @@
         <div class="row">
           <button class="btn" id="next">${i + 1 >= items.length ? 'סיום' : 'הבא'}</button>
           ${!ok && u ? `<a class="btn ghost small" href="#/unit/${u.id}">ליחידה: ${Y.inline(u.title)}</a>` : ''}
-        </div>`);
+        </div>
+        <div class="row helprow">
+          <button class="linkbtn" id="why">לא הבנתי, הסבר נוסף</button>
+          <button class="linkbtn" id="flag">לשאול את המורה</button>
+        </div>
+        <div id="whybox"></div>`);
       $app.appendChild(box);
       const go = () => { enterHandler = null; i++; step(); };
       box.querySelector('#next').addEventListener('click', go);
       setTimeout(() => { enterHandler = go; }, 150);
       box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+      box.querySelector('#flag').addEventListener('click', (e) => {
+        S.addFlag({ q: ctx.q, given: ctx.given, correct: ctx.correct, ex: ctx.ex, unit: ctx.unit, day: S.today() });
+        e.target.textContent = 'נשמר ב"שאלות למורה" (בהגדרות)';
+        e.target.disabled = true;
+      });
+
+      const whybox = box.querySelector('#whybox');
+      box.querySelector('#why').addEventListener('click', (e) => {
+        e.target.remove();
+        enterHandler = null;
+        if (!Y.ai.enabled()) {
+          whybox.innerHTML = `<div class="whycard"><p>אפשר לשאול כל צ'אט AI (למשל claude.ai) בלי להגדיר כלום: הכפתור מעתיק שאלה מוכנה עם התרגיל, התשובה שלך והתשובה התקנית.</p>
+            <label class="field"><span>מה לא ברור לך? (לא חובה)</span><textarea id="ask" rows="2" placeholder="למשל: חשבתי שלפני מילה מלשון־קודש בא דאָס"></textarea></label>
+            <div class="row"><button class="btn small" id="cp">העתקת השאלה</button><a class="btn ghost small" href="https://claude.ai/new" target="_blank" rel="noopener">לפתוח את claude.ai</a></div>
+            <p><small>כדי לקבל את ההסבר כאן, בתוך הכלי, מגדירים מפתח ב<a href="#/settings">הגדרות</a>.</small></p></div>`;
+          whybox.querySelector('#cp').addEventListener('click', async (ev) => {
+            const text = Y.ai.explainPrompt(Object.assign({}, ctx, { ask: whybox.querySelector('#ask').value.trim() }));
+            try { await navigator.clipboard.writeText(text); ev.target.textContent = 'הועתק. הדביקי בצ\'אט'; }
+            catch (err) { ev.target.textContent = 'ההעתקה נחסמה בדפדפן הזה'; }
+          });
+          return;
+        }
+        const hist = [];
+        whybox.innerHTML = `<div class="whycard"><div id="thread"></div>
+          <label class="field"><span id="asklbl">מה לא ברור לך? (לא חובה)</span><textarea id="ask" rows="2" placeholder="למשל: חשבתי שלפני מילה מלשון־קודש בא דאָס"></textarea></label>
+          <div class="row"><button class="btn small" id="send">להסביר לי</button></div></div>`;
+        const thread = whybox.querySelector('#thread');
+        const askEl = whybox.querySelector('#ask');
+        const send = whybox.querySelector('#send');
+        let first = true;
+        send.addEventListener('click', async () => {
+          const ask = askEl.value.trim();
+          if (!first && !ask) { askEl.focus(); return; }
+          send.disabled = true;
+          if (!first) { hist.push({ role: 'user', content: ask }); thread.insertAdjacentHTML('beforeend', `<div class="msg me">${esc(ask)}</div>`); }
+          const out = document.createElement('div');
+          out.className = 'msg ai';
+          out.innerHTML = '<span class="spin"></span>';
+          thread.appendChild(out);
+          try {
+            const c2 = first ? Object.assign({}, ctx, { ask }) : (ctx.asked || ctx);
+            if (first) ctx.asked = c2;
+            const full = await Y.ai.explain(c2, hist, (t) => { out.textContent = Y.disp(t); });
+            out.textContent = Y.disp(full);
+            hist.push({ role: 'assistant', content: full });
+            first = false;
+            askEl.value = '';
+            whybox.querySelector('#asklbl').textContent = 'שאלת המשך';
+            send.textContent = 'לשאול';
+          } catch (err) {
+            out.className = 'alert';
+            out.textContent = err.message;
+            if (!first) hist.pop();
+          }
+          send.disabled = false;
+        });
+      });
     };
 
     const showChoice = (it) => {
@@ -158,7 +226,7 @@
         });
         const qt = $app.querySelector('.q-text');
         if (qt && !it.plainQ) qt.outerHTML = Y.disp(qHtml(it, it.a, true));
-        feedback(it, ok, it.a);
+        feedback(it, ok, it.a, '', chosen);
       }));
     };
 
@@ -212,13 +280,17 @@
         const strict = it.strict || S.settings().strict;
         const ok = exact || (loose && !strict);
         let extra = '';
-        if (!exact && loose) extra = ok ? 'נכון, אבל שימי לב לסימנים (אַ, אָ, פּ, פֿ, ײַ...).' : 'כמעט: האותיות נכונות, חסרים או שגויים הסימנים.';
+        if (!exact && loose) {
+          const target = it.a.find((a) => Y.bare(a) === Y.bare(val));
+          const diff = Y.markDiff(val, target).map((m) => Y.inline(m)).join('<br>');
+          extra = (ok ? 'נכון, עם הבדל בסימנים.' : 'האותיות נכונות, ההבדל הוא בסימנים.') + (diff ? '<br>' + diff : '');
+        }
         inp.disabled = true;
         $app.querySelector('#check').remove();
         $app.querySelector('.keys').remove();
         if (sugg) sugg.remove();
         inp.style.borderColor = ok ? 'var(--ok)' : 'var(--bad)';
-        feedback(it, ok, it.a[0], extra);
+        feedback(it, ok, it.a[0], extra, val);
       };
       $app.querySelector('#check').addEventListener('click', check);
       enterHandler = check;
@@ -262,7 +334,7 @@
           const ok = it.a.some((a) => Y.canon(a) === Y.canon(got));
           $app.querySelectorAll('.tok').forEach((t) => { t.disabled = true; });
           chk.remove();
-          feedback(it, ok, full);
+          feedback(it, ok, full, '', got);
         };
         chk.addEventListener('click', check);
         enterHandler = ready() ? check : null;
@@ -283,7 +355,7 @@
           if (it.bad.includes(j)) x.classList.add('target');
           else if (j === k) x.classList.add('miss');
         });
-        feedback(it, ok, it.fix, ok ? 'מצאת. הנוסח התקני:' : 'המקום הבעייתי מסומן. הנוסח התקני:');
+        feedback(it, ok, it.fix, ok ? 'מצאת. הנוסח התקני:' : 'המקום הבעייתי מסומן. הנוסח התקני:', 'הקשתי על: ' + it.tokens[k]);
       }));
     };
 
@@ -850,6 +922,14 @@
         <div class="row"><button class="btn small" id="savekey">שמירה</button>${st.apiKey ? '<button class="btn ghost small" id="delkey">מחיקת המפתח</button>' : ''}</div>
       </div>
 
+      <h3>שאלות למורה</h3>
+      <div class="card stack">
+        ${(S.state.flags || []).length ? `
+        <p style="margin:0"><small>תרגילים שסימנת ב"לשאול את המורה". אפשר להעתיק את כולם ולשלוח.</small></p>
+        <ul class="miss" style="margin:0">${S.state.flags.map((f, k) => `<li><span class="yi">${esc(f.q)}</span><br><small>התשובה בכלי: <span class="yi">${esc(f.correct)}</span>${f.given ? ' · עניתי: <span class="yi">' + esc(f.given) + '</span>' : ''}</small> <button class="linkbtn" data-unflag="${k}">הסרה</button></li>`).join('')}</ul>
+        <div class="row"><button class="btn ghost small" id="cpflags">העתקת כל השאלות</button></div>` : '<p style="margin:0"><small>אחרי כל תרגיל יש כפתור "לשאול את המורה". מה שתסמני שם ייאסף כאן, כדי שתוכלי לברר אותו בשיעור.</small></p>'}
+      </div>
+
       <h3>בדיקת התוכן</h3>
       <div class="card stack">
         <p style="margin:0"><small>כל היידיש שבכלי בדף אחד, מסודר להדפסה או לשליחה: שמות העצם לפי מין, הפעלים, הכתיב, המילים, הטקסטים והתרגילים. מיועד למורה שתעבור על התוכן.</small></p>
@@ -891,6 +971,12 @@
         </div>
       </div>`);
     $app.querySelector('#strict').addEventListener('change', (e) => S.setSetting('strict', e.target.checked));
+    $app.querySelectorAll('[data-unflag]').forEach((b) => b.addEventListener('click', () => { S.removeFlag(+b.dataset.unflag); viewSettings(); }));
+    const cpf = $app.querySelector('#cpflags');
+    if (cpf) cpf.addEventListener('click', async () => {
+      const text = 'שאלות על תרגילים מהכלי "ייִדיש כּהלכה":\n\n' + S.state.flags.map((f, k) => `${k + 1}. ${f.q}\n   התשובה בכלי: ${f.correct}${f.given ? '\n   אני עניתי: ' + f.given : ''}${f.ex ? '\n   ההסבר בכלי: ' + f.ex : ''}`).join('\n\n');
+      try { await navigator.clipboard.writeText(text); cpf.textContent = 'הועתק'; } catch (e) { cpf.textContent = 'ההעתקה נחסמה'; }
+    });
     const smsg = (t, bad) => { $app.querySelector('#syncmsg').innerHTML = t ? `<p class="${bad ? 'alert' : ''}" style="margin:0">${t}</p>` : ''; };
     const son = $app.querySelector('#syncon');
     if (son) son.addEventListener('click', async () => {

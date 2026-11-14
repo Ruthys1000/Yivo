@@ -33,6 +33,38 @@
 שבת סוף אָנהייב טעם חשבון סדר אופֿן מצבֿ רעכט נאָמען ווינט הימל ים`.split(/\s+/).map((w) => Y.canon(w)));
 
 
+  /* The learner's question is always "why this gender?": give the reason when there is one, and say so when there is none. */
+  const HEB = new Set(`חבֿר תּלמיד שכן ים ספֿר סידור חודש חלום טעם שׂכל כּוח סוף שבת יום־טובֿ מינהג נס אמת שלום כּבֿוד חילוק ענין טעות חשבון סדר דור מצבֿ אופֿן ניגון חדר
+כּלה שכנה לבֿנה חלה מתּנה דירה שעה מעשׂה חתונה משפּחה שׂימחה תּורה תּפֿילה מיצווה עבֿירה סיבה עצה שאלה תּשובֿה מלחמה מדינה קהילה סבֿיבֿה חכמה ברכה צרה נסיעה נשמה אמונה דאגה השפּעה ירושה
+פּנים מזל לשון קול רחמנות גלות`.split(/\s+/).map((w) => Y.canon(w)));
+  const genderWhy = (n) => {
+    const w = Y.bare(n.w);
+    const end = (s) => w.endsWith(Y.bare(s));
+    if (HEB.has(Y.canon(n.w))) {
+      const base = 'למילים מלשון־קודש אין מין אחד קבוע (לא כולן {דאָס}); המין נלמד עם המילה, אבל יש נטייה: ';
+      if (n.g === 'f' && end('ה')) return base + 'מילה שמסתיימת ב־{ה} היא לרוב {די}.';
+      if (n.g === 'n' && end('ות')) return base + 'מילה מופשטת שמסתיימת ב־{ות} היא לרוב {דאָס}.';
+      if (n.g === 'm') return base + 'מילה שאינה מסתיימת ב־{ה} היא לרוב {דער}.';
+      return base + 'זו אחת המילים שיוצאות מן הנטייה, וצריך לזכור אותה.';
+    }
+    if (n.c === 'p' && n.g !== 'n') return n.g === 'm' ? 'שם של זכר ← {דער}.' : 'שם של נקבה ← {די}.';
+    if (n.g === 'f') {
+      for (const s of ['ונג', 'קייט', 'הייט', 'שאַפֿט']) if (end(s) && w.length > 5) return `הסיומת {־${s}} ← תמיד {די}.`;
+      if (end('ע')) return 'מילה שמסתיימת ב־{ע} היא לרוב {די}.';
+    }
+    if (n.g === 'n') {
+      if (/(ל|עלע)$/.test(w) && w !== Y.bare('מויל')) return 'צורת הקטנה (־ל) ← תמיד {דאָס}, גם כשמדובר באדם.';
+      if (/^גע/.test(w) && w !== Y.bare('געלט')) return 'הרבה שמות עצם שמתחילים ב־{גע־} הם {דאָס}.';
+      if (D.verbs.some((v) => Y.canon(v.inf) === Y.canon(n.w))) return 'שם פועל שמשמש כשם עצם ← {דאָס}.';
+    }
+    if (n.g === 'm') {
+      if (['זומער', 'ווינטער', 'פֿרילינג', 'האַרבסט'].some((s) => Y.canon(s) === Y.canon(n.w))) return 'עונות השנה ← {דער}.';
+      if (n.c === 'p' && end('ער')) return 'בעל מקצוע ב־{ער} ← {דער}.';
+    }
+    return 'אין כאן סימן חיצוני; את המין של המילה הזאת צריך לזכור.';
+  };
+  G.genderWhy = genderWhy;
+
   G.gender = (mode) => {
     const n = pickSrs(D.nouns, nounKey);
     // a third of the time, show the gender through the adjective ending instead of the article
@@ -44,13 +76,13 @@
         const a = forms[{ m: 0, f: 1, n: 2 }[n.g]];
         return {
           t: 'm', q: `אַ ___ ${n.w}`, he: n.he, opts: forms, a, fixed: true,
-          ex: `{${Y.ART.nom[n.g]} ${n.w}} — ${GNAME[n.g]}, ולכן {אַ ${a} ${n.w}}.`, key: nounKey(n), srs: nounKey(n),
+          ex: `{${Y.ART.nom[n.g]} ${n.w}} — ${GNAME[n.g]}, ולכן {אַ ${a} ${n.w}}. ${genderWhy(n)}`, key: nounKey(n), srs: nounKey(n),
         };
       }
     }
     return {
       t: 'm', q: '___ ' + n.w, he: n.he, opts: ARTS, a: Y.ART.nom[n.g], fixed: true,
-      ex: `{${Y.ART.nom[n.g]} ${n.w}} — ${GNAME[n.g]}.`, key: nounKey(n), srs: nounKey(n),
+      ex: `{${Y.ART.nom[n.g]} ${n.w}} — ${GNAME[n.g]}. ${genderWhy(n)}`, key: nounKey(n), srs: nounKey(n),
     };
   };
 

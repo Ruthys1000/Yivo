@@ -4,7 +4,7 @@
   const KEY = 'yivo.v1';
   const INTERVALS = [0, 1, 3, 7, 16, 35, 90];
 
-  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, personal: [], lastExport: 0, read: {}, settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
+  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, personal: [], lastExport: 0, read: {}, flags: [], settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
 
   let S = blank();
   try {
@@ -141,6 +141,15 @@
       save();
       return true;
     },
+    addFlag(f) {
+      if (!S.flags) S.flags = [];
+      if (S.flags.some((x) => x.q === f.q && x.correct === f.correct)) return false;
+      S.flags.unshift(f);
+      if (S.flags.length > 100) S.flags.pop();
+      save();
+      return true;
+    },
+    removeFlag(i) { S.flags.splice(i, 1); save(); },
     markRead(id) { if (!S.read) S.read = {}; S.read[id] = 1; save(); },
     removePersonal(key) { S.personal = (S.personal || []).filter((p) => p.key !== key); save(); },
     best: (k) => (S.best && S.best[k]) || 0,
@@ -190,6 +199,7 @@
       const uniq = (list, key) => { const seen = new Set(); return list.filter((x) => { const k = x[key]; if (seen.has(k)) return false; seen.add(k); return true; }); };
       S.mywords = uniq([...(S.mywords || []), ...(r.mywords || [])], 'y');
       S.personal = uniq([...(S.personal || []), ...(r.personal || [])], 'key').slice(0, 80);
+      S.flags = uniq([...(S.flags || []), ...(r.flags || [])].map((f) => Object.assign({ id: f.q + '|' + f.correct }, f)), 'id');
       if (newer) S.mistakes = r.mistakes || [];
       S.diag = r.diag || S.diag ? (newer ? Object.assign({}, S.diag, r.diag) : Object.assign({}, r.diag, S.diag)) : null;
       S.read = Object.assign({}, r.read, S.read);
