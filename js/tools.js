@@ -41,8 +41,14 @@
       run();
     }));
 
-    const replace = (pairs) => {
+    const replace = (pairs, reasons) => {
       const map = new Map(pairs);
+      // every word she fixes becomes a personal spelling exercise
+      for (const [orig, good] of pairs) {
+        if (good.includes(' ') || Y.bare(orig) === 'א') continue;
+        const key = 'p:sp:' + Y.canon(good);
+        S.addPersonal({ t: 't', q: orig, plainQ: true, he: 'כתבי בכתיב ייִוואָ · מילה מהטקסט שלך', a: [good], strict: true, ex: `{${good}}. ${(reasons && reasons.get(orig)) || ''}`, key, srs: key });
+      }
       txt.value = L.analyze(txt.value).map((t) => (t.word && map.has(t.text) ? map.get(t.text) : t.text)).join('');
       run();
     };
@@ -89,14 +95,15 @@
         <div class="row" style="margin-top:16px">
           ${Y.ai.enabled() ? '<button class="btn ghost" id="toai">בדיקת דקדוק מלאה אצל המורה</button>' : ''}
         </div>
+        <p><small>מילים שתתקני כאן נשמרות ב"התרגילים שלי" ויחזרו בסשן היומי.</small></p>
         <p><small>הבודק בודק כתיב בלבד, מילה אחרי מילה, מול מאגר של כ-${Math.round(L.exact.size / 100) * 100} צורות. הוא לא בודק מין, יחסות או סדר מילים, ומילה שאינה במאגר נשארת בלי סימון.</small></p>`);
       const fixArr = [...fixes.entries()];
       out.querySelectorAll('[data-fix]').forEach((b) => b.addEventListener('click', () => {
         const [i, j] = b.dataset.fix.split(':').map(Number);
-        replace([[fixArr[i][0], fixArr[i][1].sugg[j]]]);
+        replace([[fixArr[i][0], fixArr[i][1].sugg[j]]], new Map([[fixArr[i][0], fixArr[i][1].why]]));
       }));
       const all = out.querySelector('#all');
-      if (all) all.addEventListener('click', () => replace(single.map(([w, r]) => [w, r.sugg[0]])));
+      if (all) all.addEventListener('click', () => replace(single.map(([w, r]) => [w, r.sugg[0]]), new Map(single.map(([w, r]) => [w, r.why]))));
       out.querySelector('#copy').addEventListener('click', async (e) => {
         try { await navigator.clipboard.writeText(txt.value); e.target.textContent = 'הועתק'; }
         catch (err) { txt.select(); }
@@ -241,6 +248,123 @@
     draw();
   };
 
+  /* ---------- reading ---------- */
+  const CASE_HE = { nom: 'נאָמינאַטיוו', acc: 'אַקוזאַטיוו', dat: 'דאַטיוו' };
+  const GEN_HE = { m: 'זכר', f: 'נקבה', n: 'סתמי', pl: 'רבים' };
+  const CASE_WHY = { nom: 'הנושא, או אחרי {זײַן}', acc: 'מושא ישיר', dat: 'אחרי מילת יחס, או מושא עקיף' };
+  let xray = false;
+  V.read = (id) => {
+    const t = D.texts.find((x) => x.id === id);
+    if (!t) { location.hash = '#/learn'; return; }
+    const words = (str, tag) => str.split(/(\s+)/).map((w) => (/\s/.test(w) || !w ? w : `<span class="w"${tag ? ` data-tag="${tag}" data-np="${esc(str)}"` : ''}>${esc(w)}</span>`)).join('');
+    const para = (p) => p.split(/(\[[^\]]+\])/).map((seg) => {
+      const m = seg.match(/^\[([^|]+)\|([^\]]+)\]$/);
+      if (!m) return words(seg);
+      return `<span class="np c-${m[2].split(' ')[0]}">${words(m[1], m[2])}</span>`;
+    }).join('');
+    const draw = () => {
+      Y.ui.render(`<a class="crumb" href="#/learn">→ קריאה</a>
+        <h1><span class="yi">${esc(t.title)}</span></h1>
+        <p class="lead">${esc(t.he)} · ${esc(t.level)}. הקישי על מילה לפירוש.</p>
+        <div class="row" style="margin:12px 0">
+          <button class="btn ghost small" id="xr" aria-pressed="${xray}">${xray ? 'להסתיר את הניתוח' : 'ניתוח דקדוקי'}</button>
+          <a class="btn small" href="#/read/${t.id}/q" id="rq">שאלות על הטקסט</a>
+        </div>
+        ${xray ? '<p class="legend"><i class="cell c-nom"></i>נאָמינאַטיוו <i class="cell c-acc"></i>אַקוזאַטיוו <i class="cell c-dat"></i>דאַטיוו</p>' : ''}
+        <div class="reading${xray ? ' xray' : ''}">${t.body.split(/\n\n+/).map((p) => `<p>${para(p).replace(/\n/g, '<br>')}</p>`).join('')}</div>
+        <div class="card winfo" id="winfo" hidden></div>`);
+      document.querySelector('#xr').addEventListener('click', () => { xray = !xray; draw(); });
+      document.querySelector('#rq').addEventListener('click', (e) => {
+        e.preventDefault();
+        S.markRead(t.id);
+        Y.ui.runSession(t.qs.map((q, i) => Object.assign(Y.gen.fromTuple(q, undefined, i), { key: 'r:' + t.id + ':' + i })), { back: '#/read/' + t.id });
+      });
+      const info = document.querySelector('#winfo');
+      document.querySelectorAll('.reading .w').forEach((w) => w.addEventListener('click', () => {
+        document.querySelectorAll('.reading .w.sel').forEach((x) => x.classList.remove('sel'));
+        w.classList.add('sel');
+        const raw = w.textContent.replace(/[.,;:!?"„“]/g, '');
+        const b = Y.bare(raw);
+        const lines = [];
+        const g = Object.keys(t.gloss).find((k) => Y.bare(k) === b);
+        if (g) lines.push(esc(t.gloss[g]));
+        const ents = L.byForm.has(b) ? [...L.byForm.get(b)].map((i) => L.entries[i]) : [];
+        for (const e of ents.slice(0, 3)) {
+          const head = e.kind === 'noun' ? Y.ART.nom[e.g] + ' ' + e.head : e.head;
+          lines.push(`<span class="yi">${esc(head)}</span> · ${esc(e.he)}${e.kind === 'verb' ? ` · עבר: <span class="yi">${e.aux === 'z' ? 'איז' : 'האָט'} ${esc(e.part)}</span>` : ''}`);
+        }
+        if (w.dataset.tag) {
+          const [c, gd] = w.dataset.tag.split(' ');
+          lines.push(`<b>${CASE_HE[c]} · ${GEN_HE[gd]}</b>: <span class="yi">${esc(w.dataset.np)}</span><br><small>${Y.inline(CASE_WHY[c])}</small>`);
+        }
+        if (!lines.length) lines.push('<small>אין פירוש במאגר למילה הזאת.</small>');
+        info.hidden = false;
+        info.innerHTML = Y.disp(`<div class="yi dhead">${esc(raw)}</div>${lines.map((l) => `<div>${l}</div>`).join('')}`);
+      }));
+    };
+    draw();
+  };
+
+  /* ---------- content review sheet for a teacher ---------- */
+  V.review = () => {
+    const yi = (x) => `<span class="yi">${esc(x)}</span>`;
+    const table = (head, rows) => `<div class="tablewrap"><table><tbody><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    const nounsBy = (g) => D.nouns.filter((n) => n.g === g).map((n) => `${yi(n.w)} <small>${esc(n.he)}</small>`).join(' · ');
+    const exLine = (e) => {
+      if (e[0] === 'm') {
+        const o = e[2].split('|');
+        return `${yi(e[1].split(' // ')[0].replace('___', '【' + o[0] + '】'))} <small>מסיחים: ${o.slice(1).map(yi).join(', ')} · ${Y.inline(e[3] || '')}</small>`;
+      }
+      if (e[0] === 'b') return `${esc(e[1])} ← ${yi(e[2])} <small>מילים מיותרות: ${yi(e[3])}</small>`;
+      return `${yi(e[1] + ' ' + e[2])} <small>${esc(e[3] || '')}</small>`;
+    };
+    Y.ui.render(`<a class="crumb noprint" href="#/settings">→ הגדרות</a>
+      <h1>דף לבדיקת מורה</h1>
+      <p class="lead">כל התוכן היידי של הכלי "ייִדיש כּהלכה". התוכן נכתב לפי כללי ייִוואָ אך לא נבדק בידי מומחה. נודה על כל תיקון: מין של שם עצם, צורת בינוני, כתיב, ניסוח של כלל או משפט לא טבעי.</p>
+      <div class="row noprint" style="margin:12px 0"><button class="btn" id="pr">הדפסה / שמירה כ-PDF</button></div>
+
+      <h2>1. שמות עצם לפי מין (${D.nouns.length})</h2>
+      <h3>${yi('דער')}</h3><p class="dense">${nounsBy('m')}</p>
+      <h3>${yi('די')}</h3><p class="dense">${nounsBy('f')}</p>
+      <h3>${yi('דאָס')}</h3><p class="dense">${nounsBy('n')}</p>
+
+      <h2>2. פעלים (${D.verbs.length})</h2>
+      ${table(['שם הפועל', 'פירוש', 'פועל עזר', 'בינוני', 'הווה (איך, דו, ער)'], D.verbs.map((v) => {
+        const f = v.stem ? Y.present(v.stem, v.inf) : null;
+        return [yi(v.inf), esc(v.he), yi(v.aux === 'z' ? 'זײַן' : 'האָבן'), yi(v.part), f ? yi(`${f.ikh}, ${f.du}, ${f.er}`) : ''];
+      }))}
+
+      <h2>3. תארים ונטייתם</h2>
+      ${table(['תואר', 'פירוש', '־ער', '־ע', '־ן'], D.adjs.map((a) => [yi(a.w), esc(a.he), yi(Y.adj(a.w, 'er')), yi(Y.adj(a.w, 'e')), yi(Y.adj(a.w, 'n'))]))}
+      <h3>דרגת היתרון</h3><p class="dense">${D.comps.map((c) => yi(c.base + ' ← ' + c.comp)).join(' · ')}</p>
+
+      <h2>4. רבים והקטנה</h2>
+      <p class="dense">${D.plurals.map((p) => yi(p.sg + ' ← ' + p.pl)).join(' · ')}</p>
+      <p class="dense">${D.dims.map((d) => yi(d.base + ' ← ' + d.dim)).join(' · ')}</p>
+
+      <h2>5. כתיב: מוכר ← תקני (${D.spell.length})</h2>
+      <p class="dense">${D.spell.map((s) => `${yi(s.bad)} ← ${yi(s.good)}`).join(' · ')}</p>
+
+      <h2>6. אוצר מילים</h2>
+      ${D.decks.map((d) => `<h3>${esc(d.title)}</h3><p class="dense">${d.words.map((w) => `${yi(w.y)} <small>${esc(w.he)}${w.note ? ' (' + Y.inline(w.note) + ')' : ''}</small>`).join(' · ')}</p>`).join('')}
+
+      <h2>7. פתגמים</h2>
+      <ul>${D.proverbs.map((p) => `<li>${yi(p.full)} <small>${esc(p.he)} · מסיחים: ${p.opts.slice(1).map(yi).join(', ')}</small></li>`).join('')}</ul>
+
+      <h2>8. טקסטים לקריאה</h2>
+      ${D.texts.map((t) => `<h3>${yi(t.title)}</h3><div class="reading">${t.body.replace(/\[([^|\]]+)\|[^\]]+\]/g, '$1').split(/\n\n+/).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('')}</div>
+        <p class="dense"><small>פירושים: ${Object.entries(t.gloss).map(([k, v]) => `${yi(k)} = ${esc(v)}`).join(' · ')}</small></p>`).join('')}
+
+      <h2>9. היחידות: הסברים ותרגילים</h2>
+      ${D.units.map((u) => `<section class="runit"><h3>${u.id.toUpperCase()} · ${Y.inline(u.title)}</h3>
+        <div class="lesson">${Y.fmt(u.text)}</div>
+        <ol class="dense">${u.ex.map((e) => `<li>${exLine(e)}</li>`).join('')}</ol></section>`).join('')}
+
+      <h2>10. מילות יסוד (לבודק הכתיב)</h2>
+      <p class="dense">${D.common.map(yi).join(' · ')}</p>`);
+    document.querySelector('#pr').addEventListener('click', () => window.print());
+  };
+
   /* ---------- blitz ---------- */
   V.blitz = () => {
     const ARTS = ['דער', 'די', 'דאָס'];
@@ -272,7 +396,7 @@
       const $ = (q) => document.querySelector(q);
       const btns = [...document.querySelectorAll('.blitz .opt')];
       const next = () => {
-        cur = Y.gen.gender();
+        cur = Y.gen.gender('plain');
         $('#bw').textContent = Y.disp(cur.q.replace('___ ', ''));
         $('#bhe').textContent = cur.he;
         btns.forEach((b) => { b.className = 'opt'; });

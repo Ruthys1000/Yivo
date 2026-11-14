@@ -23,7 +23,8 @@
       return '<span class="badge">חדש</span>';
     }
     const cls = m >= 0.85 ? 'done' : m >= 0.5 ? 'mid' : 'weak';
-    return `<span class="badge ${cls}">${pct(m)}%</span>`;
+    const info = S.masteryInfo(id);
+    return `<span class="badge ${cls}" title="ימי תרגול טובים: ${info.days} מתוך 3">${pct(m)}%${info.stale ? ' ↻' : ''}</span>`;
   };
 
   /* Which unit a free-standing drill counts towards. */
@@ -32,6 +33,7 @@
     { id: 'gender', title: '{דער, די, דאָס}', sub: 'המין של כל שם עצם, בחזרה מרווחת', spec: ['gender'], unit: 'b1', n: 15 },
     { id: 'art', title: 'התווית הנכונה', sub: '{דער, דעם, די, דאָס} לפי התפקיד במשפט', spec: ['art:nom,acc,dat'], unit: 'c2', n: 12 },
     { id: 'adj', title: 'תווית + תואר', sub: '{דער גוטער, דעם גוטן, די גוטע}', spec: ['case:def'], unit: 'c3', n: 12 },
+    { id: 'ctype', title: 'צירוף בהקלדה', sub: 'מקבלים {דער טיש + גוט} וכותבים את הצירוף הנכון', spec: ['ctype'], unit: 'c3', n: 10 },
     { id: 'indef', title: 'תואר אחרי {אַ}', sub: '{אַ גוטער, אַ גוטע, אַ גוט}', spec: ['case:indef', 'case:nsp'], unit: 'c4', n: 12 },
     { id: 'spell', title: 'כתיב תקני', sub: 'מהכתיב המוכר אל כתיב ייִוואָ', spec: ['spell'], unit: null, n: 15 },
     { id: 'aux', title: '{האָבן} או {זײַן}', sub: 'פועל העזר בזמן עבר', spec: ['aux'], unit: 'd2', n: 15 },
@@ -90,6 +92,19 @@
         <span class="cnt">${Math.min(i + 1, items.length)}/${items.length}</span>
       </div>`;
 
+    /* "Show the rule": the unit's explanation, available while answering. */
+    let ruleOpen = false;
+    const attachRule = (it) => {
+      const u = it.unit && !o.noRule ? unitById(it.unit) : null;
+      if (!u) return;
+      const d = document.createElement('details');
+      d.className = 'rule';
+      d.open = ruleOpen;
+      d.innerHTML = Y.disp(`<summary>הצג את הכלל · ${Y.inline(u.title)}</summary><div class="lesson">${Y.fmt(u.text)}</div>`);
+      d.addEventListener('toggle', () => { ruleOpen = d.open; });
+      $app.appendChild(d);
+    };
+
     const qHtml = (it, filled, ok) => {
       if (it.q === '___' || !it.q) return '';
       const inner = filled ? `<span class="blank${ok ? ' ok' : ''}">${esc(filled)}</span>` : '<span class="blank">&nbsp;</span>';
@@ -130,6 +145,7 @@
         <div class="opts${three ? ' three' : ''}">
           ${opts.map((x, k) => `<button class="opt${it.heOpts ? ' he' : ''}" data-k="${k}">${esc(x)}</button>`).join('')}
         </div>`);
+      attachRule(it);
       const btns = [...$app.querySelectorAll('.opt')];
       btns.forEach((b, k) => b.addEventListener('click', () => {
         const chosen = opts[k];
@@ -151,10 +167,29 @@
         <div class="q-hint">${esc(it.he || 'כתבי את התשובה')}</div>
         ${it.plainQ ? `<div class="q-text">${esc(it.q)}</div>` : qHtml(it)}
         <input class="type-in" id="ans" type="text" lang="yi" dir="rtl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="התשובה שלך">
+        <div class="sugg" id="sugg" aria-live="polite"></div>
         <div class="keys" aria-label="אותיות מיוחדות">${KEYS.map((k) => `<button type="button" data-ch="${k}">${k}</button>`).join('')}</div>
         <button class="btn" id="check">בדיקה</button>`);
+      attachRule(it);
       const inp = $app.querySelector('#ans');
       inp.focus();
+      // outside spelling tasks, offer the fully marked form of the word being typed
+      const strictItem = it.strict || S.settings().strict;
+      const sugg = $app.querySelector('#sugg');
+      const suggest = () => {
+        if (strictItem || !sugg) return;
+        const m = inp.value.match(/(\S+)$/);
+        const w = m ? m[1] : '';
+        const set = w.length >= 2 ? Y.lex.bare.get(Y.bare(w)) : null;
+        const cands = set ? [...set].filter((c) => c !== Y.canon(w)).slice(0, 3) : [];
+        sugg.innerHTML = cands.map((c) => `<button type="button" class="chip yi">${esc(Y.disp(c))}</button>`).join('');
+        sugg.querySelectorAll('.chip').forEach((b, k) => b.addEventListener('click', () => {
+          inp.value = inp.value.slice(0, inp.value.length - w.length) + Y.disp(cands[k]);
+          sugg.innerHTML = '';
+          inp.focus();
+        }));
+      };
+      inp.addEventListener('input', suggest);
       $app.querySelectorAll('.keys button').forEach((b) => b.addEventListener('click', () => {
         const ch = b.dataset.ch;
         const s = inp.selectionStart ?? inp.value.length;
@@ -181,6 +216,7 @@
         inp.disabled = true;
         $app.querySelector('#check').remove();
         $app.querySelector('.keys').remove();
+        if (sugg) sugg.remove();
         inp.style.borderColor = ok ? 'var(--ok)' : 'var(--bad)';
         feedback(it, ok, it.a[0], extra);
       };
@@ -190,16 +226,22 @@
 
     const showOrder = (it) => {
       const target = it.a[0].split(' ');
-      let pool = Y.shuffle(target.map((w, k) => ({ w, k })));
-      if (pool.map((p) => p.w).join(' ') === target.join(' ') && pool.length > 1) pool.reverse();
+      const bank = it.bank || [];
+      const words = target.concat(bank);
+      let pool = Y.shuffle(words.map((w, k) => ({ w, k })));
+      if (pool.map((p) => p.w).join(' ') === words.join(' ') && pool.length > 1) pool.reverse();
       let line = [];
+      const ready = () => (bank.length ? line.length > 0 : !pool.length);
+      const full = (it.lead ? it.lead + ' ' : '') + it.a[0];
       const draw = () => {
         render(`${head()}
-          <div class="q-hint">סדרי את המילים למשפט: ${esc(it.he)}</div>
-          <div class="order-line"><span class="lead-w">${esc(it.lead)}</span>
+          <div class="q-hint">${bank.length ? 'בני את המשפט ביידיש. יש בבנק גם מילים מיותרות.' : 'סדרי את המילים למשפט:'}</div>
+          <div class="q-he">${esc(it.he)}</div>
+          <div class="order-line">${it.lead ? `<span class="lead-w">${esc(it.lead)}</span>` : ''}
             ${line.map((p) => `<button class="tok" data-line="${p.k}">${esc(p.w)}</button>`).join('')}</div>
           <div class="pool">${pool.map((p) => `<button class="tok" data-pool="${p.k}">${esc(p.w)}</button>`).join('')}</div>
-          <button class="btn" id="check" ${pool.length ? 'disabled' : ''}>בדיקה</button>`);
+          <button class="btn" id="check" ${ready() ? '' : 'disabled'}>בדיקה</button>`);
+        attachRule(it);
         $app.querySelectorAll('[data-pool]').forEach((b) => b.addEventListener('click', () => {
           const k = +b.dataset.pool;
           line.push(pool.find((p) => p.k === k));
@@ -214,16 +256,16 @@
         }));
         const chk = $app.querySelector('#check');
         const check = () => {
-          if (pool.length) return;
+          if (!ready()) return;
           enterHandler = null;
           const got = line.map((p) => p.w).join(' ');
           const ok = it.a.some((a) => Y.canon(a) === Y.canon(got));
           $app.querySelectorAll('.tok').forEach((t) => { t.disabled = true; });
           chk.remove();
-          feedback(it, ok, it.lead + ' ' + it.a[0]);
+          feedback(it, ok, full);
         };
         chk.addEventListener('click', check);
-        enterHandler = pool.length ? null : check;
+        enterHandler = ready() ? check : null;
       };
       draw();
     };
@@ -232,6 +274,7 @@
       render(`${head()}
         <div class="q-hint">${esc(it.he)}</div>
         <div class="hunt">${it.tokens.map((w, k) => `<button class="tok" data-k="${k}">${esc(w)}</button>`).join(' ')}</div>`);
+      attachRule(it);
       const btns = [...$app.querySelectorAll('.hunt .tok')];
       btns.forEach((b, k) => b.addEventListener('click', () => {
         const ok = it.bad.includes(k);
@@ -249,15 +292,17 @@
       const right = log.filter((l) => l.ok).length;
       const wrong = log.filter((l) => !l.ok);
       if (o.onDone) o.onDone(log);
-      const showAns = (it) => (it.t === 'h' ? it.fix : it.t === 'o' ? it.lead + ' ' + it.a[0] : it.t === 't' ? it.a[0] : (it.q && it.q !== '___' && !it.plainQ ? it.q.replace('___', it.a) : it.a));
+      const showAns = (it) => (it.t === 'h' ? it.fix : it.t === 'o' ? (it.lead ? it.lead + ' ' : '') + it.a[0] : it.t === 't' ? it.a[0] : (it.q && it.q !== '___' && !it.plainQ ? it.q.replace('___', it.a) : it.a));
       render(`
         <div class="card stack">
+          ${o.daily ? `<div><h2>סיימת את הסשן של היום</h2><small>${S.streak()} ימים ברצף · ${S.todayCount()} תשובות היום</small></div>` : ''}
           <div><div class="result-num">${right}/${log.length}</div>
           <p class="lead">${right === log.length ? 'הכול נכון. יישר כּוח!' : right / log.length >= 0.7 ? 'יפה. הטעויות נשמרו לחזרה.' : 'זה בדיוק החומר שכדאי לחזור עליו. הטעויות נשמרו.'}</p></div>
           ${o.summary ? o.summary(log) : ''}
           <div class="row">
-            ${o.again ? `<a class="btn" href="${o.again}" id="again">סבב נוסף</a>` : ''}
-            <a class="btn ghost" href="${o.back}">חזרה</a>
+            ${o.daily ? `<a class="btn" href="${o.back}">סיימתי להיום</a>` : ''}
+            ${o.again ? `<a class="btn${o.daily ? ' ghost' : ''}" href="${o.again}" id="again">${o.daily ? 'עוד סשן' : 'סבב נוסף'}</a>` : ''}
+            ${o.daily ? '' : `<a class="btn ghost" href="${o.back}">חזרה</a>`}
           </div>
         </div>
         ${wrong.length ? `<h3>לחזרה</h3><ul class="miss">${wrong.map((l) => `<li><span class="yi">${esc(showAns(l.it))}</span>${l.it.ex ? `<br><small>${Y.inline(l.it.ex)}</small>` : ''}</li>`).join('')}</ul>` : ''}`);
@@ -299,10 +344,13 @@
 
   function viewHome() {
     const nu = nextUnit();
-    const dueWords = S.dueCount('v:', allVocabKeys());
-    const mist = S.state.mistakes.length;
     const hasProgress = Object.keys(S.state.units).length > 0;
     const pv = D.proverbs[S.today() % D.proverbs.length];
+    const done = S.todayCount() >= S.GOAL;
+    const due = dueTotal();
+    const mist = S.state.mistakes.length;
+    const fresh = !S.state.diag && !hasProgress;
+    const backupOld = hasProgress && S.today() - (S.state.lastExport || 0) > 30 && Object.keys(S.state.srs).length > 60;
     const groups = D.groups.map((g) => {
       const us = D.units.filter((u) => u.group === g.id);
       const avg = us.reduce((a, u) => a + (S.mastery(u.id) || 0), 0) / us.length;
@@ -312,34 +360,30 @@
     render(`<div class="stack">
       <div>
         <h1><span class="yi">שלום־עליכם!</span></h1>
-        <p class="lead">את כבר מדברת יידיש. כאן לומדים את הכללים שמאחוריה, לפי התקן של ייִוואָ.</p>
+        <p class="lead">${fresh ? 'את כבר מדברת יידיש. כאן לומדים את הכללים שמאחוריה, לפי התקן של ייִוואָ.' : done ? 'סיימת את היעד של היום.' : 'מה עושים היום?'}</p>
       </div>
 
-      ${!S.state.diag && !hasProgress ? `
+      ${fresh ? `
       <div class="card hero stack">
-        <div><h2>נתחיל במבחן אבחון קצר</h2>
-        <p class="lead">${D.units.length} שאלות, אחת מכל נושא, כעשר דקות. בסופו תדעי אילו כללים כבר יושבים אצלך מהבית ואילו כדאי ללמוד קודם.</p></div>
-        <div class="row"><a class="btn" href="#/diag">להתחיל</a></div>
+        <div><h2>נתחיל באבחון קצר</h2>
+        <p class="lead">שתי שאלות לכל נושא, אחת מהן בהקלדה. אפשר לעשות פרק אחד בכל פעם. בסוף תדעי אילו כללים כבר יושבים אצלך מהבית ואילו כדאי ללמוד קודם.</p></div>
+        <div class="row"><a class="btn" href="#/diag">לאבחון</a><a class="btn ghost" href="#/unit/${nu.id}" style="background:transparent;color:inherit;border-color:currentColor">לדלג ולהתחיל ללמוד</a></div>
       </div>` : `
       <div class="card hero stack">
-        <div><small>היחידה הבאה</small><h2>${Y.inline(nu.title)}</h2><p class="lead">${Y.inline(nu.sub)}</p></div>
-        <div class="row"><a class="btn" href="#/unit/${nu.id}">להמשיך</a></div>
-      </div>`}
+        <div><small>${done ? 'היעד היומי הושג' : 'כרבע שעה'}</small><h2>${done ? 'רוצה עוד סשן?' : 'הסשן של היום'}</h2>
+        <p class="lead">${[due ? due + ' חזרות' : '', mist ? Math.min(mist, 3) + ' טעויות לתיקון' : '', 'תרגול של ' + nu.title.replace(/[{}]/g, '')].filter(Boolean).join(' · ')}</p></div>
+        <div class="row"><a class="btn" href="#/daily">${done ? 'עוד סשן' : 'להתחיל'}</a></div>
+      </div>
+
+      <a class="tile next" href="#/unit/${nu.id}"><small>הנושא הבא במסלול</small><b>${Y.inline(nu.title)}</b><small>${Y.inline(nu.sub)}</small></a>`}
 
       <div class="card">
         <div class="stats">
           <div class="stat"><b>${S.streak()}</b><span>ימים ברצף</span></div>
           <div class="stat"><b>${S.todayCount()}<small style="font-size:.9rem;font-weight:600">/${S.GOAL}</small></b><span>היעד היומי</span></div>
-          <div class="stat"><b>${D.units.filter((u) => (S.mastery(u.id) || 0) >= 0.85).length}/${D.units.length}</b><span>יחידות הושלמו</span></div>
+          <div class="stat"><b>${D.units.filter((u) => (S.mastery(u.id) || 0) >= 0.85).length}/${D.units.length}</b><span>יחידות יושבות</span></div>
         </div>
         <div class="bar" style="margin-top:14px" title="היעד היומי"><i style="width:${Math.min(100, (S.todayCount() / S.GOAL) * 100)}%"></i></div>
-      </div>
-
-      <div class="grid">
-        <a class="tile" href="#/daily"><b>תרגול יומי</b><small>12 שאלות מעורבות: טעויות, מילים, נושאים חלשים</small></a>
-        <a class="tile" href="#/drill/gender"><b><span class="yi">דער, די, דאָס</span></b><small>המין הדקדוקי, מילה אחרי מילה</small></a>
-        <a class="tile" href="#/words"><span class="num">${dueWords || ''}</span><b>מילים</b><small>${dueWords ? 'מילים מחכות לחזרה' : 'אוצר מילים תקני וספרותי'}</small></a>
-        <a class="tile" href="#/mistakes"><span class="num">${mist || ''}</span><b>הטעויות שלי</b><small>${mist ? 'חזרה על מה שלא ידעת' : 'אין כרגע טעויות פתוחות'}</small></a>
       </div>
 
       <div class="card proverb">
@@ -349,11 +393,6 @@
         <small>${Y.inline(pv.note)}</small>
       </div>
 
-      <div class="grid">
-        <a class="tile" href="#/check"><b>בודק כתיב</b><small>הדביקי טקסט וראי מה שונה מכתיב ייִוואָ</small></a>
-        <a class="tile" href="#/blitz"><span class="num">${S.best('blitz') || ''}</span><b>בליץ</b><small>60 שניות של <span class="yi">דער, די, דאָס</span></small></a>
-      </div>
-
       <div class="card"><h2 style="margin-bottom:12px">התקדמות</h2>${groups}
         <div class="map" aria-label="מפת היחידות">${D.units.map((u) => {
           const m = S.mastery(u.id);
@@ -361,8 +400,19 @@
           return `<a class="cell l${lvl}" href="#/unit/${u.id}" title="${esc(u.title)}${m === null ? '' : ' · ' + pct(m) + '%'}"><span>${u.id.toUpperCase()}</span></a>`;
         }).join('')}</div>
         <p class="legend"><i class="cell l0"></i>חדש <i class="cell lw"></i>לחזק <i class="cell l1"></i>התחלתי <i class="cell l2"></i>בדרך <i class="cell l3"></i>יושב</p>
-        ${S.state.diag || hasProgress ? '<p style="margin-bottom:0"><a href="#/diag">מבחן אבחון מחדש</a></p>' : ''}</div>
+        <p style="margin:12px 0 0"><small>יחידה "יושבת" אחרי תרגול טוב בשלושה ימים שונים. ציון שלא תורגל כמה שבועות דועך.</small></p>
+        ${fresh ? '' : '<p style="margin:8px 0 0"><a href="#/diag">אבחון</a></p>'}
+      </div>
+      ${backupOld ? '<p class="note tip"><b>גיבוי</b>ההתקדמות נשמרת רק בדפדפן הזה. עבר יותר מחודש מאז הגיבוי האחרון: <a href="#/settings">ייצוא לקובץ</a>.</p>' : ''}
     </div>`);
+  }
+
+  /* All spaced-repetition items that are due today. */
+  function dueTotal() {
+    const t = S.today();
+    let n = 0;
+    for (const k in S.state.srs) if (S.state.srs[k].d <= t) n++;
+    return n;
   }
 
   function viewLearn() {
@@ -372,7 +422,11 @@
         <div class="group-head"><h2>${esc(g.title)}</h2><small>${esc(g.blurb)}</small></div>
         <ul class="units">${D.units.filter((u) => u.group === g.id).map((u) => `
           <li><a href="#/unit/${u.id}"><span class="t"><b>${Y.inline(u.title)}</b><small>${Y.inline(u.sub)}</small></span>${badge(u.id)}</a></li>`).join('')}
-        </ul>`).join('')}`);
+        </ul>`).join('')}
+      <div class="group-head"><h2>קריאה</h2><small>טקסטים קצרים עם פירוש בהקשה על מילה, וניתוח דקדוקי של הצירופים.</small></div>
+      <ul class="units">${D.texts.map((t) => `
+        <li><a href="#/read/${t.id}"><span class="t"><b><span class="yi">${esc(t.title)}</span></b><small>${esc(t.he)} · ${esc(t.level)}</small></span>${S.state.read && S.state.read[t.id] ? '<span class="badge done">נקרא</span>' : '<span class="badge">חדש</span>'}</a></li>`).join('')}
+      </ul>`);
   }
 
   function viewUnit(id) {
@@ -385,6 +439,7 @@
     render(`<a class="crumb" href="#/learn">→ ${esc(g.title)}</a>
       <div class="row" style="justify-content:space-between"><h1>${Y.inline(u.title)}</h1>${badge(u.id)}</div>
       <p class="lead">${Y.inline(u.sub)}</p>
+      ${(() => { const mi = S.masteryInfo(u.id); return mi ? `<p><small>דיוק ${pct(mi.acc)}% · ימי תרגול טובים: ${mi.days} מתוך 3${mi.stale ? ' · לא תורגל זמן רב, כדאי לחזור' : ''}</small></p>` : ''; })()}
       <div class="row" style="margin:16px 0"><a class="btn" href="#/unit/${u.id}/go">תרגול</a></div>
       <div class="lesson">${Y.fmt(u.text)}</div>
       <div class="row" style="margin-top:24px">
@@ -424,8 +479,9 @@
     render(`<h1>תרגול</h1>
       <p class="lead">תרגילים שנוצרים מחדש בכל פעם, כך שאפשר לחזור עליהם כמה שרוצים.</p>
       <div class="grid" style="margin-top:16px">
-        <a class="tile" href="#/daily"><b>תרגול יומי</b><small>12 שאלות מעורבות לפי מה שאת צריכה</small></a>
+        <a class="tile" href="#/daily"><b>הסשן של היום</b><small>חזרות, טעויות והנושא הבא, בסדר שמתאים לך</small></a>
         <a class="tile" href="#/mistakes"><span class="num">${mist || ''}</span><b>הטעויות שלי</b><small>חזרה על שאלות שטעית בהן</small></a>
+        <a class="tile" href="#/personal"><span class="num">${(S.state.personal || []).length || ''}</span><b>התרגילים שלי</b><small>${(S.state.personal || []).length ? 'נבנו מתיקונים בטקסטים שכתבת' : 'ייבנו מתיקונים בבודק הכתיב ואצל המורה'}</small></a>
       </div>
       <h3>משחקים</h3>
       <div class="grid">
@@ -444,46 +500,77 @@
     runSession(genItems(d.spec, d.n, d.unit), { back: '#/practice', again: '#/drill/' + id });
   }
 
+  /* Today's session: fix mistakes, review what is due, then practise the weakest and the next unit. */
   function dailyItems() {
     const items = S.state.mistakes.slice(0, 3).map((m) => Object.assign({}, m));
-    // vocabulary: due words first, then new ones from the loanword deck
     const t = S.today();
+    const personal = Y.shuffle((S.state.personal || []).filter((p) => { const st = S.srs(p.srs || p.key); return !st || st.d <= t; })).slice(0, 2);
+    items.push(...personal.map((p) => Object.assign({}, p)));
     const due = [];
     for (const d of D.decks) for (const w of d.words) {
       const s = S.srs('v:' + w.y);
       if (s && s.d <= t) due.push([d.id, w]);
     }
     for (const [did, w] of Y.shuffle(due).slice(0, 3)) items.push(G.vocab(did, w));
-    if (due.length < 3) for (let k = due.length; k < 3; k++) items.push(G.vocab(Y.pick(D.decks).id));
+    for (let k = Math.min(due.length, 3); k < 2; k++) items.push(G.vocab(Y.pick(D.decks).id));
     items.push(...genItems(['gender'], 2, 'b1'));
     items.push(...genItems(['hunt'], 1), ...genItems(['proverb'], 1));
-    // weakest started units, otherwise the next one in the course
-    const started = D.units.filter((u) => S.mastery(u.id) !== null).sort((a, b) => S.mastery(a.id) - S.mastery(b.id)).slice(0, 2);
-    const pool = started.length ? started : [nextUnit()];
-    for (const u of pool) items.push(...G.unitRound(u, started.length > 1 ? 2 : 4));
+    // units that faded or are still weak, then the next unit in the course
+    const started = D.units.filter((u) => S.mastery(u.id) !== null && S.mastery(u.id) < 0.85)
+      .sort((a, b) => S.mastery(a.id) - S.mastery(b.id)).slice(0, 2);
+    for (const u of started) items.push(...G.unitRound(u, 2));
+    const nu = nextUnit();
+    items.push(...G.unitRound(nu, started.some((u) => u.id === nu.id) ? 2 : 4));
     const seen = new Set();
-    return Y.shuffle(items.filter((it) => { const k = it.key + '|' + it.q; if (seen.has(k)) return false; seen.add(k); return true; })).slice(0, 12);
+    return Y.shuffle(items.filter((it) => { const k = it.key + '|' + (it.q || it.he); if (seen.has(k)) return false; seen.add(k); return true; })).slice(0, 15);
   }
 
-  function viewDiag() {
+  /* Placement: two questions per unit (one multiple choice, one typed); a unit passes only with both right. */
+  function viewDiag(groupId) {
+    if (!groupId) {
+      const diag = S.state.diag || {};
+      render(`<a class="crumb" href="#/home">→ בית</a>
+        <h1>אבחון</h1>
+        <p class="lead">שתי שאלות לכל נושא: אחת בבחירה ואחת בהקלדה, כדי שניחוש לא יספיק. נושא נחשב "יושב" רק אם שתיהן נכונות. אפשר לעשות פרק אחד בכל פעם.</p>
+        <ul class="units" style="margin-top:16px">${D.groups.map((g) => {
+          const us = D.units.filter((u) => u.group === g.id);
+          const doneN = us.filter((u) => diag[u.id] !== undefined).length;
+          const weak = us.filter((u) => diag[u.id] === 0).length;
+          return `<li><a href="#/diag/${g.id}"><span class="t"><b>${esc(g.title)}</b><small>${us.length * 2} שאלות${doneN ? ` · נבדק: ${weak} מתוך ${us.length} לחיזוק` : ''}</small></span>${doneN ? '<span class="badge done">נבדק</span>' : '<span class="badge">חדש</span>'}</a></li>`;
+        }).join('')}
+          <li><a href="#/diag/all"><span class="t"><b>הכול ברצף</b><small>${D.units.length * 2} שאלות, כרבע שעה</small></span></a></li>
+        </ul>`);
+      return;
+    }
+    const units = groupId === 'all' ? D.units : D.units.filter((u) => u.group === groupId);
+    if (!units.length) return viewDiag();
     const items = [];
-    for (const u of D.units) {
-      const hand = u.ex.map((t, i) => G.fromTuple(t, u.id, i)).filter((x) => x && x.t === 'm');
-      if (hand.length) items.push(Y.pick(hand));
+    for (const u of units) {
+      const hand = Y.shuffle(u.ex.map((t, i) => G.fromTuple(t, u.id, i)).filter((x) => x && x.t === 'm'));
+      if (!hand.length) continue;
+      items.push(hand[0]);
+      const second = hand.find((h, k) => k > 0 && h.a.split(' ').length <= 2 && !ARTS.some((a) => Y.canon(a) === Y.canon(h.a))) || hand[1];
+      if (second) {
+        items.push(second.a.split(' ').length <= 2
+          ? { t: 't', q: second.q, he: second.he || 'הקלידי את החסר', a: [second.a], ex: second.ex, unit: u.id, key: second.key, strict: u.group === 'A' }
+          : second);
+      }
     }
     runSession(items, {
-      back: '#/home',
+      back: '#/diag',
+      noRule: true,
       unitId: 'diag',
       onDone(log) {
         const res = {};
-        for (const l of log) res[l.it.unit] = l.ok ? 1 : 0;
+        for (const l of log) res[l.it.unit] = (res[l.it.unit] === undefined ? 1 : res[l.it.unit]) && l.ok ? 1 : 0;
         S.setDiag(res);
       },
       summary(log) {
-        const weak = log.filter((l) => !l.ok).map((l) => unitById(l.it.unit));
-        if (!weak.length) return '<p>כל הנושאים יושבים אצלך היטב. אפשר לעבור על היחידות לפי הסדר כדי להכיר את הכללים בשמם.</p>';
+        const bad = new Set(log.filter((l) => !l.ok).map((l) => l.it.unit));
+        const weak = units.filter((u) => bad.has(u.id));
+        if (!weak.length) return '<p>כל הנושאים בפרק הזה יושבים אצלך היטב.</p>';
         return `<div><h3 style="margin-top:0">כדאי להתחיל כאן</h3><ul class="units">${weak.map((u) => `<li><a href="#/unit/${u.id}"><span class="t"><b>${Y.inline(u.title)}</b><small>${Y.inline(u.sub)}</small></span></a></li>`).join('')}</ul>
-          <p><small>שאלה אחת לנושא היא רק אינדיקציה. היחידות האלה מסומנות "לחזק" במסלול הלימוד.</small></p></div>`;
+          <p><small>היחידות האלה מסומנות "לחזק" במסלול הלימוד ובמפה.</small></p></div>`;
       },
     });
   }
@@ -615,7 +702,20 @@
               return `<div class="err"><div class="pair"><s>${esc(e.orig || '')}</s> ← <b>${esc(e.fix || '')}</b></div>
                 <div>${esc(e.explain || '')}</div>
                 <small>${tp[0]}${tp[1] ? ` · <a href="#/unit/${tp[1]}">ליחידה</a>` : ''}</small></div>`;
-            }).join('') : '<p>אין מה לתקן. הטקסט תקני.</p>'}`);
+            }).join('') : '<p>אין מה לתקן. הטקסט תקני.</p>'}
+            ${r.errors.length ? '<div class="row" style="margin-top:14px"><button class="btn ghost" id="mk">להפוך את התיקונים לתרגילים שלי</button></div>' : ''}`);
+          const mk = out.querySelector('#mk');
+          if (mk) mk.addEventListener('click', () => {
+            let n = 0;
+            r.errors.forEach((e) => {
+              if (!e.fix || !e.orig || !e.sentence || !String(e.sentence).includes(e.fix) || Y.canon(e.fix) === Y.canon(e.orig)) return;
+              const tp = TOPIC[e.topic] || TOPIC.other;
+              const key = 'p:' + Y.canon(e.sentence) + ':' + Y.canon(e.fix);
+              if (S.addPersonal({ t: 'm', q: String(e.sentence).replace(e.fix, '___'), he: 'מהטקסט שלך', opts: [e.fix, e.orig], a: e.fix, ex: e.explain || '', unit: tp[1] || undefined, key, srs: key })) n++;
+            });
+            mk.disabled = true;
+            mk.textContent = n ? n + ' תרגילים נוספו ל"התרגילים שלי"' : 'אין תיקונים שאפשר להפוך לתרגיל';
+          });
         } catch (e) {
           out.innerHTML = `<p class="alert">${esc(e.message)}</p>`;
         }
@@ -750,6 +850,12 @@
         <div class="row"><button class="btn small" id="savekey">שמירה</button>${st.apiKey ? '<button class="btn ghost small" id="delkey">מחיקת המפתח</button>' : ''}</div>
       </div>
 
+      <h3>בדיקת התוכן</h3>
+      <div class="card stack">
+        <p style="margin:0"><small>כל היידיש שבכלי בדף אחד, מסודר להדפסה או לשליחה: שמות העצם לפי מין, הפעלים, הכתיב, המילים, הטקסטים והתרגילים. מיועד למורה שתעבור על התוכן.</small></p>
+        <div class="row"><a class="btn ghost small" href="#/review">דף לבדיקת מורה</a></div>
+      </div>
+
       <h3>ההתקדמות שלי</h3>
       <div class="card stack">
         <p style="margin:0"><small>ההתקדמות נשמרת בדפדפן של המכשיר הזה. כדי להעביר אותה למכשיר אחר או לגבות אותה, ייצאי קובץ וייבאי אותו שם.</small></p>
@@ -787,7 +893,7 @@
 
   /* ================= router ================= */
 
-  Y.ui = { render, runSession, KEYS, aiDraft: '', cleanup: null };
+  Y.ui = { render, runSession, KEYS, aiDraft: '', cleanup: null, unitById };
 
   function route() {
     enterHandler = null;
@@ -795,8 +901,8 @@
     const parts = (location.hash || '#/home').replace(/^#\//, '').split('/');
     const [a, b, c] = parts;
     document.querySelectorAll('#nav a').forEach((n) => {
-      const on = n.dataset.r === a || (n.dataset.r === 'learn' && (a === 'unit' || a === 'diag')) ||
-        (n.dataset.r === 'practice' && ['drill', 'daily', 'mistakes', 'blitz'].includes(a)) ||
+      const on = n.dataset.r === a || (n.dataset.r === 'learn' && ['unit', 'diag', 'read'].includes(a)) ||
+        (n.dataset.r === 'practice' && ['drill', 'daily', 'mistakes', 'blitz', 'personal'].includes(a)) ||
         (n.dataset.r === 'tools' && ['check', 'dict', 'lab', 'ai', 'ref'].includes(a)) ||
         (n.dataset.r === 'words' && ['deck', 'mywords'].includes(a));
       n.classList.toggle('on', on);
@@ -806,9 +912,12 @@
     if (a === 'unit') return c === 'go' ? viewUnitGo(b) : viewUnit(b);
     if (a === 'practice') return viewPractice();
     if (a === 'drill') return viewDrill(b);
-    if (a === 'daily') return runSession(dailyItems(), { back: '#/home', again: '#/daily' });
+    if (a === 'daily') return runSession(dailyItems(), { back: '#/home', again: '#/daily', daily: true });
+    if (a === 'personal') return runSession(Y.shuffle((S.state.personal || []).slice()).slice(0, 12).map((x) => Object.assign({}, x)), { back: '#/practice', again: '#/personal' });
+    if (a === 'read') return Y.views.read(b);
+    if (a === 'review') return Y.views.review();
     if (a === 'mistakes') return runSession(S.state.mistakes.slice(0, 15).map((m) => Object.assign({}, m)), { back: '#/practice', again: '#/mistakes' });
-    if (a === 'diag') return viewDiag();
+    if (a === 'diag') return viewDiag(b);
     if (a === 'words') return viewWords();
     if (a === 'deck') return c === 'go' ? viewDeckGo(b) : viewDeck(b);
     if (a === 'mywords') return runSession(Y.shuffle(S.state.mywords).slice(0, 12).map((w) => G.myword(w)), { back: '#/words', again: '#/mywords' });

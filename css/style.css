@@ -373,3 +373,41 @@ b.art { color: var(--ok); font-weight: 800; }
 .blitz { text-align: center; }
 .bword { font-size: 3rem; font-weight: 700; line-height: 1.3; margin: 4px 0 22px; }
 .blitz .opt { font-size: 1.5rem; min-height: 72px; }
+
+/* ---------- rule panel, typing suggestions, build ---------- */
+details.rule { margin-top: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+details.rule summary { cursor: pointer; padding: 10px 14px; font-size: .9rem; font-weight: 600; color: var(--muted); }
+details.rule[open] summary { border-bottom: 1px solid var(--line); color: var(--accent); }
+details.rule .lesson { padding: 4px 14px 12px; font-size: .95rem; max-height: 55vh; overflow: auto; }
+.sugg { display: flex; gap: 6px; flex-wrap: wrap; min-height: 8px; margin-top: 8px; }
+.chip { cursor: pointer; background: var(--ok-soft); color: var(--ok); border: 0; border-radius: 99px; padding: 4px 14px; font-size: 1.15rem; font-weight: 600; }
+.q-he { font-size: 1.3rem; font-weight: 600; margin: 4px 0 14px; text-wrap: balance; }
+.tile.next b { font-size: 1.15rem; margin: 2px 0; }
+
+/* ---------- reading ---------- */
+.reading { font-family: var(--yi); font-size: 1.4rem; line-height: 2.05; }
+.reading p { margin: 0 0 .9em; }
+.reading .w { cursor: pointer; border-radius: 4px; padding: 0 1px; }
+.reading .w:hover { background: var(--gold-soft); }
+.reading .w.sel { background: var(--gold); color: var(--card); }
+.reading.xray .np { border-bottom: 3px solid; padding-bottom: 1px; }
+.reading.xray .c-nom, .cell.c-nom { border-color: var(--ok); }
+.reading.xray .c-acc, .cell.c-acc { border-color: var(--gold); }
+.reading.xray .c-dat, .cell.c-dat { border-color: var(--accent); }
+.legend .cell.c-nom { background: var(--ok); } .legend .cell.c-acc { background: var(--gold); } .legend .cell.c-dat { background: var(--accent); }
+.winfo { position: sticky; bottom: calc(84px + env(safe-area-inset-bottom)); margin-top: 16px; border-color: var(--gold); line-height: 1.7; }
+@media (min-width: 860px) { .winfo { bottom: 16px; } }
+
+/* ---------- teacher review sheet ---------- */
+.dense { line-height: 2; }
+.runit { border-top: 1px solid var(--line); margin-top: 18px; }
+ol.dense { padding-inline-start: 1.4em; }
+ol.dense li { margin-bottom: 4px; }
+@media print {
+  .top, .nav, .noprint { display: none !important; }
+  body { background: #fff; color: #000; padding: 0; font-size: 11pt; }
+  main { max-width: none; padding: 0; }
+  .card, .tablewrap, .note { box-shadow: none; break-inside: avoid; }
+  h2 { break-after: avoid; margin-top: 18pt; }
+  a { color: inherit; text-decoration: none; }
+}

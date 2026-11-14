@@ -27,8 +27,27 @@
 
   const nounKey = (n) => 'g:' + n.g + ':' + n.w;
 
-  G.gender = () => {
+  /* Mass and very abstract nouns sound odd with a random adjective, so they stay out of adjective drills. */
+  const NOADJ = new Set(`וואַסער ברויט פֿלייש גאָלד זילבער אײַזן האָלץ גראָז געלט בלוט מילך פּוטער קאַווע צוקער ווײַן קעז רעגן שניי לופֿט ערד פּאַפּיר
+געזונט עסן וויסן מאָל רחמנות גלות שלאָף שׂכל כּוח אמת שלום כּבֿוד מזל גליק לעבן צוקונפֿט מוזיק ליטעראַטור וויסנשאַפֿט פֿרייד ליבע
+שבת סוף אָנהייב טעם חשבון סדר אופֿן מצבֿ רעכט נאָמען ווינט הימל ים`.split(/\s+/).map((w) => Y.canon(w)));
+
+
+  G.gender = (mode) => {
     const n = pickSrs(D.nouns, nounKey);
+    // a third of the time, show the gender through the adjective ending instead of the article
+    if (mode !== 'plain' && Math.random() < 0.35 && !n.irr && !NOADJ.has(Y.canon(n.w))) {
+      const pool = D.adjs.filter((a) => a.c.includes(n.c) && !/^[אע]/.test(a.w));
+      if (pool.length) {
+        const adj = Y.pick(pool).w;
+        const forms = [Y.adj(adj, 'er'), Y.adj(adj, 'e'), adj];
+        const a = forms[{ m: 0, f: 1, n: 2 }[n.g]];
+        return {
+          t: 'm', q: `אַ ___ ${n.w}`, he: n.he, opts: forms, a, fixed: true,
+          ex: `{${Y.ART.nom[n.g]} ${n.w}} — ${GNAME[n.g]}, ולכן {אַ ${a} ${n.w}}.`, key: nounKey(n), srs: nounKey(n),
+        };
+      }
+    }
     return {
       t: 'm', q: '___ ' + n.w, he: n.he, opts: ARTS, a: Y.ART.nom[n.g], fixed: true,
       ex: `{${Y.ART.nom[n.g]} ${n.w}} — ${GNAME[n.g]}.`, key: nounKey(n), srs: nounKey(n),
@@ -45,11 +64,6 @@
     acc: 'כאן זה מושא ישיר',
     dat: 'אחרי מילת יחס (או פועל שדורש דאַטיוו)',
   };
-
-  /* Mass and very abstract nouns sound odd with a random adjective, so they stay out of adjective drills. */
-  const NOADJ = new Set(`וואַסער ברויט פֿלייש גאָלד זילבער אײַזן האָלץ גראָז געלט בלוט מילך פּוטער קאַווע צוקער ווײַן קעז רעגן שניי לופֿט ערד פּאַפּיר
-געזונט עסן וויסן מאָל רחמנות גלות שלאָף שׂכל כּוח אמת שלום כּבֿוד מזל גליק לעבן צוקונפֿט מוזיק ליטעראַטור וויסנשאַפֿט פֿרייד ליבע
-שבת סוף אָנהייב טעם חשבון סדר אופֿן מצבֿ רעכט נאָמען ווינט הימל ים`.split(/\s+/).map((w) => Y.canon(w)));
 
   const caseItem = (cases, withAdj, def, adjFilter) => {
     const kase = Y.pick(cases);
@@ -76,13 +90,24 @@
     const opts = [correct].concat(Y.shuffle(cands).slice(0, 3));
     const artNom = Y.ART.nom[n.g];
     return {
-      t: 'm', q: frame, he: (adj ? '' : '') + n.he, opts, a: correct,
+      t: 'm', q: frame, he: n.he, opts, a: correct, parts: { n, adj, kase, def },
       ex: `{${artNom} ${n.w}} — ${GNAME[n.g]}. ${WHY[kase]}: ${CNAME[kase]} ← {${correct}}.`,
       key: 'case:' + kase + ':' + n.w,
     };
   };
 
   G.art = (arg) => caseItem(arg.split(','), false, true);
+
+  /* Production version of the case drills: type the whole phrase from its dictionary forms. */
+  G.ctype = (arg) => {
+    const def = arg === 'indef' ? false : arg === 'def' ? true : Math.random() < 0.65;
+    const it = caseItem(['nom', 'acc', 'dat'], true, def);
+    const { n, adj } = it.parts;
+    return {
+      t: 't', q: it.q, a: [it.a], ex: it.ex, key: 'ct:' + it.key,
+      he: `הקלידי את הצירוף: ${Y.ART.nom[n.g]} ${n.w} + ${adj}${def ? '' : ' · לא מיודע (אַ)'} · ${n.he}`,
+    };
+  };
   G.case = (arg) => {
     if (arg === 'def') return caseItem(['nom', 'acc', 'dat'], true, true);
     if (arg === 'indef') return caseItem(['nom', 'acc', 'dat'], true, false);
@@ -287,6 +312,11 @@
       const alts = tuple[2].split(' / ');
       return { t: 'o', lead: tuple[1], a: alts, he: tuple[3] || '', ex: tuple[4] || '', unit, key };
     }
+    if (tuple[0] === 'b') {
+      // build a sentence from a word bank that also holds wrong forms
+      const alts = tuple[2].split(' / ');
+      return { t: 'o', lead: '', a: alts, bank: tuple[3] ? tuple[3].split(' ') : [], he: tuple[1], ex: tuple[4] || '', unit, key };
+    }
     return null;
   };
 
@@ -295,7 +325,13 @@
     const st = Y.store.unit(unit.id);
     const hand = unit.ex.map((t, i) => G.fromTuple(t, unit.id, i)).filter(Boolean);
     const unsolved = Y.shuffle(hand.filter((h) => !st.ok[h.key]));
-    const solved = Y.shuffle(hand.filter((h) => st.ok[h.key]));
+    // once an item was recognised in multiple choice, it comes back as a typing task
+    const strict = unit.group === 'A';
+    const typed = (h) => (h.t === 'm' && h.a.split(' ').length <= 3 && /___/.test(h.q)
+      ? { t: 't', q: h.q, he: h.he || 'הקלידי את החסר', a: [h.a], ex: h.ex, unit: h.unit, key: h.key, strict }
+      : h);
+    const solved = Y.shuffle(hand.filter((h) => st.ok[h.key] === 1)).map(typed)
+      .concat(Y.shuffle(hand.filter((h) => st.ok[h.key] >= 2)).map(typed));
     const gens = unit.gen || [];
     const nGen = gens.length ? Math.min(Math.ceil(size * 0.45), size) : 0;
     const items = unsolved.concat(solved).slice(0, size - nGen);

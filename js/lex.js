@@ -87,10 +87,12 @@
     if (!skipText) for (const m of u.text.match(/\{[^}]*\}/g) || []) addForm(m.replace(/[{}*←=+\/,.;:!?()]/g, ' '));
     for (const e of u.ex) {
       if (e[0] === 'm') addForm((e[1].split(' // ')[0].replace('___', e[2].split('|')[0])).replace(/[.,;:!?()←—–]/g, ' '));
+      else if (e[0] === 'b') addForm(e[2].split(' / ')[0].replace(/[.,;:!?]/g, ' '));
       else addForm((e[1] + ' ' + e[2].split(' / ')[0]).replace(/[.,;:!?]/g, ' '));
     }
   }
   for (const p of D.proverbs) addForm(p.full.replace(/[.,;:!?–]/g, ' '));
+  for (const t of D.texts || []) addForm(t.body.replace(/\|[^\]]*\]/g, ' ').replace(/[\[\].,;:!?–\n]/g, ' '));
 
   /* ---------- spelling checker ---------- */
 
