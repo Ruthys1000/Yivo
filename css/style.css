@@ -395,7 +395,9 @@ details.rule .lesson { padding: 4px 14px 12px; font-size: .95rem; max-height: 55
 .reading.xray .c-acc, .cell.c-acc { border-color: var(--gold); }
 .reading.xray .c-dat, .cell.c-dat { border-color: var(--accent); }
 .legend .cell.c-nom { background: var(--ok); } .legend .cell.c-acc { background: var(--gold); } .legend .cell.c-dat { background: var(--accent); }
-.winfo { position: sticky; bottom: calc(84px + env(safe-area-inset-bottom)); margin-top: 16px; border-color: var(--gold); line-height: 1.7; }
+.reading { padding-bottom: 190px; }
+.winfo { position: fixed; z-index: 25; inset-inline: 12px; bottom: calc(80px + env(safe-area-inset-bottom)); max-width: 736px; margin-inline: auto; border-color: var(--gold); line-height: 1.7; max-height: 40vh; overflow: auto; box-shadow: 0 8px 30px rgba(0, 0, 0, .18); }
+.winfo .wclose { float: left; font: inherit; font-size: 1.4rem; line-height: 1; background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 4px; }
 @media (min-width: 860px) { .winfo { bottom: 16px; } }
 
 /* ---------- teacher review sheet ---------- */

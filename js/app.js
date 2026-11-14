@@ -403,7 +403,7 @@
         <p style="margin:12px 0 0"><small>יחידה "יושבת" אחרי תרגול טוב בשלושה ימים שונים. ציון שלא תורגל כמה שבועות דועך.</small></p>
         ${fresh ? '' : '<p style="margin:8px 0 0"><a href="#/diag">אבחון</a></p>'}
       </div>
-      ${backupOld ? '<p class="note tip"><b>גיבוי</b>ההתקדמות נשמרת רק בדפדפן הזה. עבר יותר מחודש מאז הגיבוי האחרון: <a href="#/settings">ייצוא לקובץ</a>.</p>' : ''}
+      ${backupOld && !Y.sync.enabled() ? '<p class="note tip"><b>גיבוי</b>ההתקדמות נשמרת רק בדפדפן הזה. עבר יותר מחודש מאז הגיבוי האחרון. אפשר <a href="#/settings">להפעיל סנכרון או לייצא קובץ</a>.</p>' : ''}
     </div>`);
   }
 
@@ -856,9 +856,34 @@
         <div class="row"><a class="btn ghost small" href="#/review">דף לבדיקת מורה</a></div>
       </div>
 
+      <h3>סנכרון בין מכשירים</h3>
+      <div class="card stack">
+        ${Y.sync.enabled() ? `
+        <p style="margin:0"><b style="color:var(--ok)">הסנכרון פעיל.</b> <small>${Y.sync.last() ? 'סונכרן לאחרונה: ' + new Date(Y.sync.last()).toLocaleString('he-IL') : ''}${Y.sync.status === 'error' ? ' · ' + esc(Y.sync.error) : ''}</small></p>
+        <p style="margin:0"><small>ההתקדמות נשמרת כקובץ פרטי (Gist) בחשבון ה-GitHub שלך ומתעדכנת לבד. במכשיר נוסף: להזין שם את אותו קוד.</small></p>
+        <div class="row"><button class="btn small" id="syncnow">לסנכרן עכשיו</button><button class="btn ghost small" id="syncoff">לנתק את המכשיר הזה</button></div>` : `
+        <p style="margin:0"><small>בלי שרת ובלי הרשמה: ההתקדמות נשמרת כקובץ פרטי בחשבון ה-GitHub שלך, וכל מכשיר שתזיני בו את אותו קוד יסתנכרן איתו.</small></p>
+        <ol style="margin:0;padding-inline-start:1.2em;font-size:.92rem;line-height:1.8">
+          <li>לפתוח את <a href="https://github.com/settings/tokens/new?scopes=gist&description=Yiddish%20sync" target="_blank" rel="noopener">יצירת קוד ב-GitHub</a> (הקישור כבר מסמן רק את ההרשאה <b dir="ltr">gist</b>).</li>
+          <li>ב-Expiration לבחור <b dir="ltr">No expiration</b>, וללחוץ <b dir="ltr">Generate token</b>.</li>
+          <li>להעתיק את הקוד שמתחיל ב-<span dir="ltr">ghp_</span> ולהדביק כאן.</li>
+        </ol>
+        <label class="field"><span>קוד סנכרון (GitHub token)</span><input id="synctok" type="password" dir="ltr" autocomplete="off" placeholder="ghp_..."></label>
+        <div class="row"><button class="btn small" id="syncon">חיבור</button></div>
+        <p style="margin:0"><small>הקוד נשמר רק בדפדפן הזה ונשלח רק ל-GitHub. ההרשאה שלו מוגבלת לקובצי Gist, בלי גישה למאגרים שלך.</small></p>`}
+        <div id="syncmsg"></div>
+      </div>
+
+      <h3>תזכורת יומית</h3>
+      <div class="card stack">
+        <p style="margin:0"><small>אירוע יומי חוזר ביומן של הטלפון, עם התראה וקישור ישיר לסשן של היום. פותחים את הקובץ שיורד ומאשרים את ההוספה ליומן.</small></p>
+        <div class="row"><label class="field" style="width:130px"><span>שעה</span><input id="remtime" type="time" value="20:00"></label>
+        <button class="btn ghost small" id="rem" style="align-self:flex-end">הוספה ליומן</button></div>
+      </div>
+
       <h3>ההתקדמות שלי</h3>
       <div class="card stack">
-        <p style="margin:0"><small>ההתקדמות נשמרת בדפדפן של המכשיר הזה. כדי להעביר אותה למכשיר אחר או לגבות אותה, ייצאי קובץ וייבאי אותו שם.</small></p>
+        <p style="margin:0"><small>ההתקדמות נשמרת בדפדפן של המכשיר הזה. אפשר גם לגבות אותה ידנית לקובץ.</small></p>
         <div class="row">
           <button class="btn ghost small" id="exp">ייצוא לקובץ</button>
           <label class="btn ghost small" style="cursor:pointer">ייבוא מקובץ<input type="file" id="imp" accept="application/json,.json" hidden></label>
@@ -866,6 +891,32 @@
         </div>
       </div>`);
     $app.querySelector('#strict').addEventListener('change', (e) => S.setSetting('strict', e.target.checked));
+    const smsg = (t, bad) => { $app.querySelector('#syncmsg').innerHTML = t ? `<p class="${bad ? 'alert' : ''}" style="margin:0">${t}</p>` : ''; };
+    const son = $app.querySelector('#syncon');
+    if (son) son.addEventListener('click', async () => {
+      const tok = $app.querySelector('#synctok').value.trim();
+      if (!tok) return;
+      son.disabled = true;
+      smsg('<span class="spin"></span> מתחבר...');
+      try { await Y.sync.connect(tok); viewSettings('הסנכרון פעיל. ההתקדמות מהמכשירים מוזגה.'); }
+      catch (e) { smsg(esc(e.message), true); son.disabled = false; }
+    });
+    const snow = $app.querySelector('#syncnow');
+    if (snow) snow.addEventListener('click', async () => {
+      snow.disabled = true;
+      smsg('<span class="spin"></span> מסנכרן...');
+      try { await Y.sync.now(); viewSettings('סונכרן.'); }
+      catch (e) { smsg(esc(e.message), true); snow.disabled = false; }
+    });
+    const soff = $app.querySelector('#syncoff');
+    if (soff) soff.addEventListener('click', () => { Y.sync.disconnect(); viewSettings('המכשיר נותק מהסנכרון. ההתקדמות נשארה כאן ובחשבון.'); });
+    $app.querySelector('#rem').addEventListener('click', () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([Y.sync.reminderFile($app.querySelector('#remtime').value || '20:00')], { type: 'text/calendar' }));
+      a.download = 'yiddish-reminder.ics';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
     $app.querySelector('#savekey').addEventListener('click', () => {
       S.setSetting('apiKey', $app.querySelector('#key').value.trim());
       S.setSetting('model', $app.querySelector('#model').value);
@@ -934,6 +985,17 @@
 
   window.addEventListener('hashchange', route);
   route();
+
+  // sync on start and whenever the app comes back to the foreground; refresh the screen if other devices added progress
+  const pull = () => {
+    if (!Y.sync.enabled()) return;
+    Y.sync.now().then((changed) => {
+      const a = (location.hash || '#/home').replace(/^#\//, '').split('/')[0];
+      if (changed && ['home', '', 'learn', 'practice', 'words'].includes(a)) route();
+    }).catch(() => {});
+  };
+  pull();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pull(); });
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});

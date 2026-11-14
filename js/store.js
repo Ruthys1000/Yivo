@@ -14,13 +14,17 @@
   } catch (e) { /* storage unavailable: run in memory */ }
 
   const save = () => {
+    S.updatedAt = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
+    if (store && store.onChange) store.onChange();
   };
 
   const dayNum = (d) => Math.floor((d.getTime() - d.getTimezoneOffset() * 60000) / 86400000);
   const today = () => dayNum(new Date());
 
-  const store = (Y.store = {
+  let store = null;
+  store = (Y.store = {
+    onChange: null,
     today,
     get state() { return S; },
     save,
@@ -158,6 +162,42 @@
       S.settings = Object.assign(blank().settings, obj.settings || {});
       S.settings.apiKey = key;
       save();
+    },
+    /* Everything worth syncing: progress only, never keys or settings. */
+    syncable() {
+      const copy = JSON.parse(JSON.stringify(S));
+      delete copy.settings;
+      return copy;
+    },
+    /* Merge progress from another device into this one. Returns true if anything here changed. */
+    merge(r) {
+      if (!r || typeof r !== 'object' || !r.units || !r.srs) return false;
+      const before = JSON.stringify(store.syncable());
+      const newer = (r.updatedAt || 0) > (S.updatedAt || 0);
+      for (const d in r.days || {}) S.days[d] = Math.max(S.days[d] || 0, r.days[d]);
+      for (const k in r.srs) {
+        const a = S.srs[k];
+        const b = r.srs[k];
+        if (!a || b.d > a.d || (b.d === a.d && newer)) S.srs[k] = b;
+      }
+      for (const id in r.units) {
+        const a = S.units[id];
+        const b = r.units[id];
+        const pick = !a || (b.last || 0) > (a.last || 0) || ((b.last || 0) === (a.last || 0) && (b.hist || []).length > (a.hist || []).length) ? b : a;
+        const days = [...new Set([...((a && a.okDays) || []), ...(b.okDays || [])])].sort((x, y) => x - y).slice(-6);
+        S.units[id] = Object.assign({}, pick, { okDays: days, ok: Object.assign({}, (pick === a ? b : a || {}).ok, pick.ok) });
+      }
+      const uniq = (list, key) => { const seen = new Set(); return list.filter((x) => { const k = x[key]; if (seen.has(k)) return false; seen.add(k); return true; }); };
+      S.mywords = uniq([...(S.mywords || []), ...(r.mywords || [])], 'y');
+      S.personal = uniq([...(S.personal || []), ...(r.personal || [])], 'key').slice(0, 80);
+      if (newer) S.mistakes = r.mistakes || [];
+      S.diag = r.diag || S.diag ? (newer ? Object.assign({}, S.diag, r.diag) : Object.assign({}, r.diag, S.diag)) : null;
+      S.read = Object.assign({}, r.read, S.read);
+      for (const k in r.best || {}) S.best[k] = Math.max(S.best[k] || 0, r.best[k]);
+      S.lastExport = Math.max(S.lastExport || 0, r.lastExport || 0);
+      const changed = JSON.stringify(store.syncable()) !== before;
+      if (changed) { const t = Math.max(S.updatedAt || 0, r.updatedAt || 0); save(); S.updatedAt = t; }
+      return changed;
     },
     reset() {
       const settings = S.settings;

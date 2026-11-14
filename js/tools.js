@@ -299,7 +299,8 @@
         }
         if (!lines.length) lines.push('<small>אין פירוש במאגר למילה הזאת.</small>');
         info.hidden = false;
-        info.innerHTML = Y.disp(`<div class="yi dhead">${esc(raw)}</div>${lines.map((l) => `<div>${l}</div>`).join('')}`);
+        info.innerHTML = Y.disp(`<button class="wclose" aria-label="סגירה">×</button><div class="yi dhead">${esc(raw)}</div>${lines.map((l) => `<div>${l}</div>`).join('')}`);
+        info.querySelector('.wclose').addEventListener('click', () => { info.hidden = true; w.classList.remove('sel'); });
       }));
     };
     draw();
