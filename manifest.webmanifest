@@ -1,0 +1,13 @@
+{
+  "name": "ייִדיש כּהלכה",
+  "short_name": "ייִדיש",
+  "description": "דקדוק, כתיב ואוצר מילים לפי כללי ייִוואָ",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4eee2",
+  "theme_color": "#8c2a2a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

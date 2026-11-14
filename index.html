@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ייִדיש כּהלכה · דקדוק וכתיב לפי ייִוואָ</title>
+  <meta name="description" content="כלי אישי ללימוד יידיש תקנית לפי כללי ייִוואָ: כתיב, דקדוק ואוצר מילים.">
+  <meta name="theme-color" content="#f4eee2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16130f" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#/home" aria-label="דף הבית">
+      <span class="brand-mark yi">ייִ</span>
+      <span class="brand-name"><span class="yi">ייִדיש כּהלכה</span><small>לפי כללי ייִוואָ</small></span>
+    </a>
+    <nav class="nav" id="nav" aria-label="ניווט ראשי">
+      <a href="#/home" data-r="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg><span>בית</span></a>
+      <a href="#/learn" data-r="learn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h9a4 4 0 014 4v12H9a4 4 0 01-4-4zM9 9h6M9 13h6"/></svg><span>לימוד</span></a>
+      <a href="#/practice" data-r="practice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg><span>תרגול</span></a>
+      <a href="#/words" data-r="words"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>מילים</span></a>
+      <a href="#/ai" data-r="ai"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v11H10l-5 4z"/></svg><span>מורה</span></a>
+    </nav>
+    <div class="top-tools">
+      <a href="#/ref" title="טבלאות">טבלאות</a>
+      <a href="#/settings" title="הגדרות">הגדרות</a>
+    </div>
+  </header>
+
+  <main id="app" tabindex="-1"></main>
+
+  <script src="js/text.js"></script>
+  <script src="js/data/words.js"></script>
+  <script src="js/data/spelling.js"></script>
+  <script src="js/data/vocab.js"></script>
+  <script src="js/data/units1.js"></script>
+  <script src="js/data/units2.js"></script>
+  <script src="js/data/units3.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/gen.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
