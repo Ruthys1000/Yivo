@@ -319,3 +319,57 @@ textarea.big { min-height: 150px; line-height: 1.7; resize: vertical; }
 .spin { display: inline-block; width: 18px; height: 18px; border: 2.5px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: sp .8s linear infinite; vertical-align: middle; }
 @keyframes sp { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } .tile, .bar i { transition: none; } }
+
+/* ---------- error hunt ---------- */
+.hunt { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 6px; }
+.hunt .tok { font-size: 1.45rem; }
+.tok.target { background: var(--gold-soft); border-color: var(--gold); color: var(--gold); font-weight: 700; }
+.tok.miss { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+.tok:disabled { cursor: default; }
+
+/* ---------- home extras ---------- */
+.proverb { border-inline-start: 4px solid var(--gold); }
+.proverb .pv { font-size: 1.45rem; font-weight: 600; line-height: 1.5; margin: 4px 0 2px; text-wrap: balance; }
+.proverb small { display: block; }
+.map { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 6px; margin-top: 16px; }
+.cell { display: grid; place-items: center; aspect-ratio: 1; border-radius: 8px; text-decoration: none; font-size: .68rem; font-weight: 700; direction: ltr; background: var(--paper); color: var(--muted); border: 1px solid var(--line); }
+.cell.lw { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.cell.l1 { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.cell.l2 { background: var(--gold-soft); color: var(--gold); border-color: transparent; }
+.cell.l3 { background: var(--ok); color: var(--card); border-color: transparent; }
+a.cell:hover { outline: 2px solid var(--accent); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: .78rem; color: var(--muted); margin: 12px 0 0; }
+.legend .cell { display: inline-block; width: 14px; height: 14px; aspect-ratio: auto; border-radius: 4px; margin-inline-start: 8px; }
+
+/* ---------- spelling checker ---------- */
+.checked { font-family: var(--yi); font-size: 1.35rem; line-height: 2; overflow-wrap: anywhere; }
+mark.w-fix { background: var(--bad-soft); color: inherit; border-bottom: 2.5px solid var(--bad); border-radius: 4px 4px 0 0; padding: 0 2px; }
+mark.w-hint { background: none; color: inherit; border-bottom: 2.5px dotted var(--gold); padding: 0 1px; }
+.fixrow { display: grid; grid-template-columns: minmax(70px, auto) auto 1fr; gap: 6px 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.fixrow:first-child { border-top: 0; padding-top: 0; }
+.fixrow .old { font-size: 1.25rem; color: var(--bad); }
+.fixrow small { grid-column: 1 / -1; line-height: 1.4; }
+.btn.yi { font-family: var(--yi); font-size: 1.2rem; font-weight: 600; color: var(--ok); }
+
+/* ---------- dictionary ---------- */
+.dcard .dhead { font-size: 1.6rem; font-weight: 700; }
+.dcard dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--line); }
+.dcard dt { font-size: .8rem; font-weight: 700; color: var(--muted); padding-top: 4px; }
+.dcard dd { margin: 0; }
+b.end { color: var(--accent); font-weight: 800; }
+b.art { color: var(--ok); font-weight: 800; }
+
+/* ---------- case lab ---------- */
+.seg { display: inline-flex; border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; }
+.seg button { font: inherit; font-size: .92rem; cursor: pointer; background: transparent; color: var(--muted); border: 0; padding: 8px 14px; min-height: 40px; }
+.seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.field select.yi-in { font-family: var(--yi); font-size: 1.1rem; }
+.labt td { font-size: 1.4rem; line-height: 1.6; font-weight: 400; }
+.labt th { width: 1%; vertical-align: middle; }
+.labt .ph { background: color-mix(in srgb, var(--gold-soft) 70%, transparent); border-radius: 6px; padding: 1px 6px; }
+.labt small { font-family: var(--ui); font-size: .8rem; }
+
+/* ---------- blitz ---------- */
+.blitz { text-align: center; }
+.bword { font-size: 3rem; font-weight: 700; line-height: 1.3; margin: 4px 0 22px; }
+.blitz .opt { font-size: 1.5rem; min-height: 72px; }

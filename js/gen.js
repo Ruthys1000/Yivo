@@ -209,11 +209,69 @@
     key: 'my:' + w.y, srs: 'my:' + w.y,
   });
 
+  /* Past / future transformation: type the whole sentence. */
+  const VEL = { ikh: 'וועל', du: 'וועסט', er: 'וועט', mir: 'וועלן', ir: 'וועט', zey: 'וועלן' };
+  G.tense = () => {
+    const v = Y.pick(D.verbs.filter((x) => x.stem));
+    const [pron, p] = Y.pick(PERSONS);
+    const f = Y.present(v.stem, v.inf);
+    const past = Math.random() < 0.65;
+    let a;
+    if (past) {
+      const aux = (v.aux === 'z' ? ZAYN : HOBN)[p];
+      a = [`${pron} ${aux} ${v.part}`];
+      if (v.aux === 'z' && (p === 'mir' || p === 'zey')) a.push(`${pron} זענען ${v.part}`);
+      if (v.aux === 'z' && p === 'ir') a.push(`${pron} זענט ${v.part}`);
+    } else a = [`${pron} ${VEL[p]} ${v.inf}`];
+    return {
+      t: 't', q: `${pron} ${f[p]}.`, plainQ: true, he: (past ? 'העבירי לזמן עבר' : 'העבירי לזמן עתיד') + ' · ' + v.he, a,
+      ex: past
+        ? `{${v.inf}} נוטה עם {${v.aux === 'z' ? 'זײַן' : 'האָבן'}}; הבינוני: {${v.part}}.`
+        : `עתיד: {${VEL[p]}} + שם הפועל.`,
+      key: 'tense:' + (past ? 'p:' : 'f:') + v.inf + ':' + p, unit: past ? 'd2' : 'd4',
+    };
+  };
+
+  /* Proverb with a grammar blank. */
+  G.proverb = () => {
+    const pr = pickSrs(D.proverbs, (x) => 'pv:' + x.full);
+    return {
+      t: 'm', q: pr.q, he: pr.he, opts: pr.opts, a: pr.opts[0], ex: pr.note, key: 'pv:' + pr.full, srs: 'pv:' + pr.full,
+    };
+  };
+
+  /* Error hunt: a sentence with one non-standard word; tap it. Built from the hand-written exercises. */
+  let huntPool = null;
+  G.hunt = () => {
+    if (!huntPool) {
+      huntPool = [];
+      for (const u of D.units) {
+        u.ex.forEach((t, i) => {
+          if (t[0] !== 'm') return;
+          const q = t[1].split(' // ')[0];
+          if (/[()←]/.test(q) || /^איין /.test(q) || q.split(' ').length < 3) return;
+          huntPool.push({ u: u.id, i, q, opts: t[2].split('|'), ex: t[3] || '' });
+        });
+      }
+    }
+    const h = Y.pick(huntPool);
+    const wrong = Y.pick(h.opts.slice(1));
+    const before = h.q.split('___')[0].trim();
+    const start = before ? before.split(' ').length : 0;
+    const tokens = h.q.replace('___', wrong).split(' ');
+    const bad = wrong.split(' ').map((_, k) => start + k);
+    const fix = h.q.replace('___', h.opts[0]);
+    return {
+      t: 'h', tokens, bad, fix, he: 'במשפט יש מקום אחד שאינו לפי התקן. הקישי עליו.',
+      ex: `{${h.opts[0]}}, לא {${wrong}}. ${h.ex}`, unit: h.u, key: 'h:' + h.u + ':' + h.i,
+    };
+  };
+
   /* Run a generator spec such as "spell:n" or "case:def". */
   G.run = (spec, unit) => {
     const [name, arg] = spec.split(':');
     const it = G[name](arg);
-    it.unit = unit;
+    it.unit = unit || it.unit;
     return it;
   };
 

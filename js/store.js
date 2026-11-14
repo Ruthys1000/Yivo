@@ -4,7 +4,7 @@
   const KEY = 'yivo.v1';
   const INTERVALS = [0, 1, 3, 7, 16, 35, 90];
 
-  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
+  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
 
   let S = blank();
   try {
@@ -83,7 +83,7 @@
         S.mistakes = S.mistakes.filter((m) => m.key !== mk);
         if (!correct) {
           const snap = {};
-          for (const f of ['t', 'q', 'he', 'opts', 'a', 'ex', 'unit', 'key', 'srs', 'lead', 'fixed', 'strict', 'plainQ', 'heOpts']) {
+          for (const f of ['t', 'q', 'he', 'opts', 'a', 'ex', 'unit', 'key', 'srs', 'lead', 'fixed', 'strict', 'plainQ', 'heOpts', 'tokens', 'bad', 'fix']) {
             if (item[f] !== undefined) snap[f] = item[f];
           }
           S.mistakes.unshift(snap);
@@ -106,6 +106,9 @@
     removeWord(y) { S.mywords = S.mywords.filter((w) => w.y !== y); delete S.srs['my:' + y]; save(); },
 
     setDiag(res) { S.diag = res; save(); },
+    best: (k) => (S.best && S.best[k]) || 0,
+    setBest(k, v) { if (!S.best) S.best = {}; if (v > (S.best[k] || 0)) { S.best[k] = v; save(); return true; } return false; },
+    GOAL: 20,
 
     exportData() {
       const copy = JSON.parse(JSON.stringify(S));

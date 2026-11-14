@@ -40,6 +40,11 @@
     { id: 'plural', title: 'רבים', sub: '{טיש ← טישן, בוך ← ביכער}', spec: ['plural'], unit: 'b3', n: 12 },
     { id: 'dim', title: 'הקטנה', sub: '{הויז ← הײַזל}', spec: ['dim'], unit: 'b4', n: 10 },
     { id: 'comp', title: 'דרגת היתרון', sub: '{גרויס ← גרעסער}', spec: ['comp'], unit: 'c7', n: 10 },
+    { id: 'tense', title: 'מהווה לעבר ולעתיד', sub: '{איך גיי ← איך בין געגאַנגען}', spec: ['tense'], unit: null, n: 10 },
+  ];
+  const GAMES = [
+    { id: 'hunt', title: 'מצאי את הטעות', sub: 'משפט עם מקום אחד שאינו לפי התקן. כמו הגהה.', spec: ['hunt'], unit: null, n: 10 },
+    { id: 'prov', title: 'פתגמים', sub: 'השלימי את הפתגם, ולמדי אותו על הדרך', spec: ['proverb'], unit: null, n: 10 },
   ];
 
 
@@ -99,8 +104,8 @@
       box.className = 'fb ' + (ok ? 'ok' : 'no');
       box.innerHTML = Y.disp(`
         <h4>${ok ? 'נכון' : 'התשובה לפי התקן'}</h4>
-        ${ok && !extra ? '' : `<p class="ans">${esc(shown)}</p>`}
         ${extra ? `<p>${extra}</p>` : ''}
+        ${ok && !extra ? '' : `<p class="ans">${esc(shown)}</p>`}
         ${it.ex ? `<p>${Y.inline(it.ex)}</p>` : ''}
         <div class="row">
           <button class="btn" id="next">${i + 1 >= items.length ? 'סיום' : 'הבא'}</button>
@@ -223,12 +228,28 @@
       draw();
     };
 
+    const showHunt = (it) => {
+      render(`${head()}
+        <div class="q-hint">${esc(it.he)}</div>
+        <div class="hunt">${it.tokens.map((w, k) => `<button class="tok" data-k="${k}">${esc(w)}</button>`).join(' ')}</div>`);
+      const btns = [...$app.querySelectorAll('.hunt .tok')];
+      btns.forEach((b, k) => b.addEventListener('click', () => {
+        const ok = it.bad.includes(k);
+        btns.forEach((x, j) => {
+          x.disabled = true;
+          if (it.bad.includes(j)) x.classList.add('target');
+          else if (j === k) x.classList.add('miss');
+        });
+        feedback(it, ok, it.fix, ok ? 'מצאת. הנוסח התקני:' : 'המקום הבעייתי מסומן. הנוסח התקני:');
+      }));
+    };
+
     const finish = () => {
       enterHandler = null;
       const right = log.filter((l) => l.ok).length;
       const wrong = log.filter((l) => !l.ok);
       if (o.onDone) o.onDone(log);
-      const showAns = (it) => (it.t === 'o' ? it.lead + ' ' + it.a[0] : it.t === 't' ? it.a[0] : (it.q && it.q !== '___' && !it.plainQ ? it.q.replace('___', it.a) : it.a));
+      const showAns = (it) => (it.t === 'h' ? it.fix : it.t === 'o' ? it.lead + ' ' + it.a[0] : it.t === 't' ? it.a[0] : (it.q && it.q !== '___' && !it.plainQ ? it.q.replace('___', it.a) : it.a));
       render(`
         <div class="card stack">
           <div><div class="result-num">${right}/${log.length}</div>
@@ -249,6 +270,7 @@
       if (i >= items.length) return finish();
       const it = items[i];
       if (it.t === 't') showType(it);
+      else if (it.t === 'h') showHunt(it);
       else if (it.t === 'o') showOrder(it);
       else showChoice(it);
     };
@@ -280,6 +302,7 @@
     const dueWords = S.dueCount('v:', allVocabKeys());
     const mist = S.state.mistakes.length;
     const hasProgress = Object.keys(S.state.units).length > 0;
+    const pv = D.proverbs[S.today() % D.proverbs.length];
     const groups = D.groups.map((g) => {
       const us = D.units.filter((u) => u.group === g.id);
       const avg = us.reduce((a, u) => a + (S.mastery(u.id) || 0), 0) / us.length;
@@ -306,9 +329,10 @@
       <div class="card">
         <div class="stats">
           <div class="stat"><b>${S.streak()}</b><span>ימים ברצף</span></div>
-          <div class="stat"><b>${S.todayCount()}</b><span>תשובות היום</span></div>
+          <div class="stat"><b>${S.todayCount()}<small style="font-size:.9rem;font-weight:600">/${S.GOAL}</small></b><span>היעד היומי</span></div>
           <div class="stat"><b>${D.units.filter((u) => (S.mastery(u.id) || 0) >= 0.85).length}/${D.units.length}</b><span>יחידות הושלמו</span></div>
         </div>
+        <div class="bar" style="margin-top:14px" title="היעד היומי"><i style="width:${Math.min(100, (S.todayCount() / S.GOAL) * 100)}%"></i></div>
       </div>
 
       <div class="grid">
@@ -318,7 +342,25 @@
         <a class="tile" href="#/mistakes"><span class="num">${mist || ''}</span><b>הטעויות שלי</b><small>${mist ? 'חזרה על מה שלא ידעת' : 'אין כרגע טעויות פתוחות'}</small></a>
       </div>
 
+      <div class="card proverb">
+        <small>פתגם היום</small>
+        <div class="yi pv">${esc(pv.full)}</div>
+        <div>${esc(pv.he)}</div>
+        <small>${Y.inline(pv.note)}</small>
+      </div>
+
+      <div class="grid">
+        <a class="tile" href="#/check"><b>בודק כתיב</b><small>הדביקי טקסט וראי מה שונה מכתיב ייִוואָ</small></a>
+        <a class="tile" href="#/blitz"><span class="num">${S.best('blitz') || ''}</span><b>בליץ</b><small>60 שניות של <span class="yi">דער, די, דאָס</span></small></a>
+      </div>
+
       <div class="card"><h2 style="margin-bottom:12px">התקדמות</h2>${groups}
+        <div class="map" aria-label="מפת היחידות">${D.units.map((u) => {
+          const m = S.mastery(u.id);
+          const lvl = m === null ? (S.state.diag && S.state.diag[u.id] === 0 ? 'w' : '0') : m >= 0.85 ? '3' : m >= 0.5 ? '2' : '1';
+          return `<a class="cell l${lvl}" href="#/unit/${u.id}" title="${esc(u.title)}${m === null ? '' : ' · ' + pct(m) + '%'}"><span>${u.id.toUpperCase()}</span></a>`;
+        }).join('')}</div>
+        <p class="legend"><i class="cell l0"></i>חדש <i class="cell lw"></i>לחזק <i class="cell l1"></i>התחלתי <i class="cell l2"></i>בדרך <i class="cell l3"></i>יושב</p>
         ${S.state.diag || hasProgress ? '<p style="margin-bottom:0"><a href="#/diag">מבחן אבחון מחדש</a></p>' : ''}</div>
     </div>`);
   }
@@ -385,6 +427,11 @@
         <a class="tile" href="#/daily"><b>תרגול יומי</b><small>12 שאלות מעורבות לפי מה שאת צריכה</small></a>
         <a class="tile" href="#/mistakes"><span class="num">${mist || ''}</span><b>הטעויות שלי</b><small>חזרה על שאלות שטעית בהן</small></a>
       </div>
+      <h3>משחקים</h3>
+      <div class="grid">
+        <a class="tile" href="#/blitz"><span class="num">${S.best('blitz') || ''}</span><b>בליץ <span class="yi">דער · די · דאָס</span></b><small>60 שניות, כמה שיותר מילים</small></a>
+        ${GAMES.map((d) => `<a class="tile" href="#/drill/${d.id}"><b>${Y.inline(d.title)}</b><small>${Y.inline(d.sub)}</small></a>`).join('')}
+      </div>
       <h3>תרגילי שינון</h3>
       <div class="grid">
         ${DRILLS.map((d) => `<a class="tile" href="#/drill/${d.id}"><b>${Y.inline(d.title)}</b><small>${Y.inline(d.sub)}</small></a>`).join('')}
@@ -392,7 +439,7 @@
   }
 
   function viewDrill(id) {
-    const d = DRILLS.find((x) => x.id === id);
+    const d = DRILLS.concat(GAMES).find((x) => x.id === id);
     if (!d) return viewPractice();
     runSession(genItems(d.spec, d.n, d.unit), { back: '#/practice', again: '#/drill/' + id });
   }
@@ -409,6 +456,7 @@
     for (const [did, w] of Y.shuffle(due).slice(0, 3)) items.push(G.vocab(did, w));
     if (due.length < 3) for (let k = due.length; k < 3; k++) items.push(G.vocab(Y.pick(D.decks).id));
     items.push(...genItems(['gender'], 2, 'b1'));
+    items.push(...genItems(['hunt'], 1), ...genItems(['proverb'], 1));
     // weakest started units, otherwise the next one in the course
     const started = D.units.filter((u) => S.mastery(u.id) !== null).sort((a, b) => S.mastery(a.id) - S.mastery(b.id)).slice(0, 2);
     const pool = started.length ? started : [nextUnit()];
@@ -535,13 +583,14 @@
     }
     const tabs = `<div class="tabs"><a href="#/ai" class="${tab === 'check' ? 'on' : ''}">בדיקת כתיבה</a><a href="#/ai/chat" class="${tab === 'chat' ? 'on' : ''}">שאלות ושיחה</a></div>`;
     if (tab === 'check') {
-      render(`<h1>המורה</h1>${tabs}
+      render(`<a class="crumb" href="#/tools">→ כלים</a><h1>המורה</h1>${tabs}
         <p class="lead">כתבי כמה משפטים ביידיש, בכתיב שנוח לך. התיקון יראה מה שונה מהתקן ולמה.</p>
         <textarea class="big" id="txt" lang="yi" dir="rtl" placeholder="שרײַב דאָ..." style="margin-top:12px"></textarea>
         <div class="keys">${KEYS.map((k) => `<button type="button" data-ch="${k}">${k}</button>`).join('')}</div>
         <div class="row"><button class="btn" id="go">בדיקה</button></div>
         <div id="out" style="margin-top:18px"></div>`);
       const txt = $app.querySelector('#txt');
+      if (Y.ui.aiDraft) { txt.value = Y.ui.aiDraft; Y.ui.aiDraft = ''; }
       $app.querySelectorAll('.keys button').forEach((b) => b.addEventListener('click', () => {
         const s = txt.selectionStart; const e = txt.selectionEnd;
         txt.value = txt.value.slice(0, s) + b.dataset.ch + txt.value.slice(e);
@@ -678,7 +727,7 @@
 | {שׂ} s | {תּ} t | {ת} s | {ח} kh | {ש} sh |`;
 
   function viewRef() {
-    render(`<h1>טבלאות</h1><p class="lead">כל הטבלאות במקום אחד, לעיון מהיר בזמן כתיבה.</p><div class="lesson">${Y.fmt(REF)}</div>`);
+    render(`<a class="crumb" href="#/tools">→ כלים</a><h1>טבלאות</h1><p class="lead">כל הטבלאות במקום אחד, לעיון מהיר בזמן כתיבה.</p><div class="lesson">${Y.fmt(REF)}</div>`);
   }
 
   /* ---------- settings ---------- */
@@ -738,13 +787,17 @@
 
   /* ================= router ================= */
 
+  Y.ui = { render, runSession, KEYS, aiDraft: '', cleanup: null };
+
   function route() {
     enterHandler = null;
+    if (Y.ui.cleanup) { Y.ui.cleanup(); Y.ui.cleanup = null; }
     const parts = (location.hash || '#/home').replace(/^#\//, '').split('/');
     const [a, b, c] = parts;
     document.querySelectorAll('#nav a').forEach((n) => {
       const on = n.dataset.r === a || (n.dataset.r === 'learn' && (a === 'unit' || a === 'diag')) ||
-        (n.dataset.r === 'practice' && ['drill', 'daily', 'mistakes'].includes(a)) ||
+        (n.dataset.r === 'practice' && ['drill', 'daily', 'mistakes', 'blitz'].includes(a)) ||
+        (n.dataset.r === 'tools' && ['check', 'dict', 'lab', 'ai', 'ref'].includes(a)) ||
         (n.dataset.r === 'words' && ['deck', 'mywords'].includes(a));
       n.classList.toggle('on', on);
       if (on) n.setAttribute('aria-current', 'page'); else n.removeAttribute('aria-current');
@@ -761,6 +814,11 @@
     if (a === 'mywords') return runSession(Y.shuffle(S.state.mywords).slice(0, 12).map((w) => G.myword(w)), { back: '#/words', again: '#/mywords' });
     if (a === 'ai') return viewAi(b === 'chat' ? 'chat' : 'check');
     if (a === 'ref') return viewRef();
+    if (a === 'tools') return Y.views.tools();
+    if (a === 'check') return Y.views.check();
+    if (a === 'dict') return Y.views.dict();
+    if (a === 'lab') return Y.views.lab(b);
+    if (a === 'blitz') return Y.views.blitz();
     if (a === 'settings') return viewSettings();
     return viewHome();
   }
