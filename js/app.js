@@ -201,6 +201,8 @@
       });
     };
 
+    /* the three articles always carry the same colour, so each word gets tied to one */
+    const gcls = (x) => { const k = ARTS.findIndex((a) => Y.canon(a) === Y.canon(x)); return k < 0 ? '' : ' g-' + 'mfn'[k]; };
     const showChoice = (it) => {
       let opts = Y.uniq(it.opts.map(String));
       if (opts.every((x) => ARTS.some((a) => Y.canon(a) === Y.canon(x)))) {
@@ -211,7 +213,7 @@
         <div class="q-hint">${esc(it.he || 'השלימי את החסר')}</div>
         ${it.plainQ ? `<div class="q-text">${esc(it.q)}</div>` : qHtml(it)}
         <div class="opts${three ? ' three' : ''}">
-          ${opts.map((x, k) => `<button class="opt${it.heOpts ? ' he' : ''}" data-k="${k}">${esc(x)}</button>`).join('')}
+          ${opts.map((x, k) => `<button class="opt${it.heOpts ? ' he' : ''}${gcls(x)}" data-k="${k}">${esc(x)}</button>`).join('')}
         </div>`);
       attachRule(it);
       const btns = [...$app.querySelectorAll('.opt')];
@@ -447,7 +449,8 @@
         <div class="row"><a class="btn" href="#/daily">${done ? 'עוד סשן' : 'להתחיל'}</a></div>
       </div>
 
-      <a class="tile next" href="#/unit/${nu.id}"><small>הנושא הבא במסלול</small><b>${Y.inline(nu.title)}</b><small>${Y.inline(nu.sub)}</small></a>`}
+      <a class="tile next" href="#/unit/${nu.id}"><small>הנושא הבא במסלול</small><b>${Y.inline(nu.title)}</b><small>${Y.inline(nu.sub)}</small></a>
+      <a class="tile next" href="#/track"><small>מסלול נפרד, צעד אחד בכל פעם</small><b><span class="yi">דער · די · דאָס</span> מההתחלה</b><small>שש מילים בכל פעם: מין, תואר, <span class="yi">דעם</span>, <span class="yi">מײַן</span></small></a>`}
 
       <div class="card">
         <div class="stats">
@@ -551,6 +554,7 @@
     render(`<h1>תרגול</h1>
       <p class="lead">תרגילים שנוצרים מחדש בכל פעם, כך שאפשר לחזור עליהם כמה שרוצים.</p>
       <div class="grid" style="margin-top:16px">
+        <a class="tile" href="#/track"><b><span class="yi">דער · די · דאָס</span> מההתחלה</b><small>מסלול בצעדים קטנים: שש מילים בכל פעם</small></a>
         <a class="tile" href="#/daily"><b>הסשן של היום</b><small>חזרות, טעויות והנושא הבא, בסדר שמתאים לך</small></a>
         <a class="tile" href="#/mistakes"><span class="num">${mist || ''}</span><b>הטעויות שלי</b><small>חזרה על שאלות שטעית בהן</small></a>
         <a class="tile" href="#/personal"><span class="num">${(S.state.personal || []).length || ''}</span><b>התרגילים שלי</b><small>${(S.state.personal || []).length ? 'נבנו מתיקונים בטקסטים שכתבת' : 'ייבנו מתיקונים בבודק הכתיב ואצל המורה'}</small></a>
@@ -1048,6 +1052,7 @@
     if (a === 'learn') return viewLearn();
     if (a === 'unit') return c === 'go' ? viewUnitGo(b) : viewUnit(b);
     if (a === 'practice') return viewPractice();
+    if (a === 'track') return Y.views.track(b, c);
     if (a === 'drill') return viewDrill(b);
     if (a === 'daily') return runSession(dailyItems(), { back: '#/home', again: '#/daily', daily: true });
     if (a === 'personal') return runSession(Y.shuffle((S.state.personal || []).slice()).slice(0, 12).map((x) => Object.assign({}, x)), { back: '#/practice', again: '#/personal' });
