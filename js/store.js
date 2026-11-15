@@ -109,7 +109,7 @@
         S.mistakes = S.mistakes.filter((m) => m.key !== mk);
         if (!correct) {
           const snap = {};
-          for (const f of ['t', 'q', 'he', 'opts', 'a', 'ex', 'unit', 'key', 'srs', 'lead', 'fixed', 'strict', 'plainQ', 'heOpts', 'tokens', 'bad', 'fix', 'bank']) {
+          for (const f of ['t', 'q', 'he', 'opts', 'a', 'ex', 'unit', 'key', 'srs', 'lead', 'fixed', 'strict', 'plainQ', 'heOpts', 'also', 'tokens', 'bad', 'fix', 'bank']) {
             if (item[f] !== undefined) snap[f] = item[f];
           }
           S.mistakes.unshift(snap);

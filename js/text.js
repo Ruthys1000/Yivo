@@ -85,7 +85,9 @@
     const bareLast = stripMarks(Y.canon(stem)).slice(-1);
     const du = bareLast === 'ס' ? s + 'ט' : s + 'סט';
     const er = bareLast === 'ט' ? stem : s + 'ט';
-    return { ikh: stem, du, er, mir: inf, ir: er, zey: inf };
+    // plural = stem + ־ן; a stem that ends in a vowel takes ־ען even where the infinitive is contracted (גיין ← מיר גייען, זען ← מיר זעען)
+    const pl = /(יי|ע)$/.test(stripMarks(Y.canon(stem))) ? stem + 'ען' : inf;
+    return { ikh: stem, du, er, mir: pl, ir: er, zey: pl };
   };
 
   /* When a typed answer has the right letters but different marks, say exactly which and why. */

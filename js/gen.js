@@ -67,6 +67,13 @@
 
   G.gender = (mode) => {
     const n = pickSrs(D.nouns, nounKey);
+    if (n.alt) {
+      const a2 = Y.ART.nom[n.alt];
+      return {
+        t: 'm', q: '___ ' + n.w, he: n.he, opts: ARTS, a: Y.ART.nom[n.g], also: [a2], fixed: true,
+        ex: `{${Y.ART.nom[n.g]} ${n.w}}, ובתקן מקובל גם {${a2} ${n.w}}. שתי התשובות נכונות.`, key: nounKey(n), srs: nounKey(n),
+      };
+    }
     // a third of the time, show the gender through the adjective ending instead of the article
     if (mode !== 'plain' && Math.random() < 0.35 && !n.irr && !NOADJ.has(Y.canon(n.w))) {
       const pool = D.adjs.filter((a) => a.c.includes(n.c) && !/^[אע]/.test(a.w));
@@ -99,7 +106,7 @@
 
   const caseItem = (cases, withAdj, def, adjFilter) => {
     const kase = Y.pick(cases);
-    const n = Y.pick(D.nouns.filter((x) => !x.irr && !(withAdj && NOADJ.has(Y.canon(x.w)))));
+    const n = Y.pick(D.nouns.filter((x) => !x.irr && !x.alt && !(withAdj && NOADJ.has(Y.canon(x.w)))));
     let adj = null;
     if (withAdj) {
       let pool = D.adjs.filter((a) => a.c.includes(n.c));
