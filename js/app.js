@@ -172,7 +172,7 @@
         ${ok && !extra ? '' : `<p class="ans">${esc(shown)}</p>`}
         ${it.ex ? `<p>${Y.inline(it.ex)}</p>` : ''}
         ${retype ? `<label class="field retype"><span>הקלידי את הצורה התקנית כדי להמשיך</span>
-          <input class="type-in" id="re" type="text" lang="yi" dir="rtl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>` : ''}
+          <input class="type-in" id="re" type="text" lang="yi" dir="rtl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>${keysHtml()}` : ''}
         <div class="row">
           <button class="btn" id="next"${retype ? ' disabled' : ''}>${i + 1 >= items.length ? (o.then ? 'הלאה' : 'סיום') : 'הבא'}</button>
           ${retype ? '<button class="linkbtn" id="skipre">להמשיך בלי להקליד</button>' : ''}
@@ -190,12 +190,15 @@
       if (retype) {
         const re = box.querySelector('#re');
         const skip = box.querySelector('#skipre');
-        const match = () => [shown].concat(Array.isArray(it.a) ? it.a : []).some((a) => Y.bare(a) === Y.bare(re.value.trim()));
+        // where the marks are the point (spelling items, or the exact-spelling setting), they are required here too
+        const exactRe = it.strict || S.settings().strict;
+        const match = () => [shown].concat(Array.isArray(it.a) ? it.a : []).some((a) => (exactRe ? Y.canon(a) === Y.canon(re.value.trim()) : Y.bare(a) === Y.bare(re.value.trim())));
+        bindKeys(box.querySelector('.keys'), re);
         re.addEventListener('input', () => {
           const m = match();
           nextBtn.disabled = !m;
           re.style.borderColor = m ? 'var(--ok)' : '';
-          if (m) skip.hidden = true;
+          if (m) { skip.hidden = true; box.querySelector('.keys').hidden = true; }
         });
         skip.addEventListener('click', () => { nextBtn.disabled = false; skip.hidden = true; nextBtn.focus(); });
         setTimeout(() => { enterHandler = () => { if (!nextBtn.disabled) go(); }; re.focus({ preventScroll: true }); }, 150);
@@ -294,13 +297,29 @@
       }));
     };
 
+    /* The row of special letters; a diacritic key pressed right after its base letter replaces that letter. */
+    const keysHtml = () => `<div class="keys" aria-label="אותיות מיוחדות">${KEYS.map((k) => `<button type="button" data-ch="${k}">${k}</button>`).join('')}</div>`;
+    const bindKeys = (box, inp) => box.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+      const ch = b.dataset.ch;
+      const s = inp.selectionStart ?? inp.value.length;
+      const e = inp.selectionEnd ?? inp.value.length;
+      let before = inp.value.slice(0, s);
+      const base = ch.normalize('NFD')[0];
+      if (ch.length > 1 && before.endsWith(base) && Y.canon(ch) !== Y.canon('ײַ')) before = before.slice(0, -1);
+      inp.value = before + ch + inp.value.slice(e);
+      const pos = (before + ch).length;
+      inp.focus();
+      inp.setSelectionRange(pos, pos);
+      inp.dispatchEvent(new Event('input'));
+    }));
+
     const showType = (it) => {
       render(`${head()}
         <div class="q-hint">${esc(it.he || 'כתבי את התשובה')}</div>
         ${it.plainQ ? `<div class="q-text">${esc(it.q)}</div>` : qHtml(it)}
         <input class="type-in" id="ans" type="text" lang="yi" dir="rtl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="התשובה שלך">
         <div class="sugg" id="sugg" aria-live="polite"></div>
-        <div class="keys" aria-label="אותיות מיוחדות">${KEYS.map((k) => `<button type="button" data-ch="${k}">${k}</button>`).join('')}</div>
+        ${keysHtml()}
         <button class="btn" id="check">בדיקה</button>`);
       attachRule(it);
       const inp = $app.querySelector('#ans');
@@ -322,19 +341,7 @@
         }));
       };
       inp.addEventListener('input', suggest);
-      $app.querySelectorAll('.keys button').forEach((b) => b.addEventListener('click', () => {
-        const ch = b.dataset.ch;
-        const s = inp.selectionStart ?? inp.value.length;
-        const e = inp.selectionEnd ?? inp.value.length;
-        // a diacritic key pressed right after its base letter replaces that letter
-        let before = inp.value.slice(0, s);
-        const base = ch.normalize('NFD')[0];
-        if (ch.length > 1 && before.endsWith(base) && Y.canon(ch) !== Y.canon('ײַ')) before = before.slice(0, -1);
-        inp.value = before + ch + inp.value.slice(e);
-        const pos = (before + ch).length;
-        inp.focus();
-        inp.setSelectionRange(pos, pos);
-      }));
+      bindKeys($app.querySelector('.keys'), inp);
       const check = () => {
         const val = inp.value.trim();
         if (!val) { inp.focus(); return; }
