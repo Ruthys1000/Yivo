@@ -25,16 +25,18 @@
 
   /* ---------- spelling checker ---------- */
   let draft = '';
-  V.check = () => {
-    Y.ui.render(`<a class="crumb" href="#/tools">→ כלים</a>
+  /* o.head / o.foot embed the checker in another screen (the writing part of the daily session), with its own empty draft. */
+  V.check = (o) => {
+    o = o || {};
+    Y.ui.render(`${o.head || `<a class="crumb" href="#/tools">→ כלים</a>
       <h1>בודק כתיב</h1>
-      <p class="lead">כתבי או הדביקי טקסט ביידיש, בכל כתיב. הבודק מסמן מה שונה מכתיב ייִוואָ ומציע את הצורה התקנית.</p>
+      <p class="lead">כתבי או הדביקי טקסט ביידיש, בכל כתיב. הבודק מסמן מה שונה מכתיב ייִוואָ ומציע את הצורה התקנית.</p>`}
       <textarea class="big" id="txt" lang="yi" dir="rtl" placeholder="למשל: איך האב נישט קיין צייט היינט, ווייל איך דארף ארבעטן" style="margin-top:12px"></textarea>
       <div class="keys">${Y.ui.KEYS.map((k) => `<button type="button" data-ch="${k}">${k}</button>`).join('')}</div>
-      <div id="out"></div>`);
+      <div id="out"></div>${o.foot || ''}`);
     const $ = (q) => document.querySelector(q);
     const txt = $('#txt');
-    txt.value = draft;
+    txt.value = o.head ? '' : draft;
     document.querySelectorAll('.keys button').forEach((b) => b.addEventListener('click', () => {
       const s = txt.selectionStart; const e = txt.selectionEnd;
       txt.value = txt.value.slice(0, s) + b.dataset.ch + txt.value.slice(e);
@@ -55,10 +57,11 @@
     };
 
     function run() {
-      draft = txt.value;
+      const cur = txt.value;
+      if (!o.head) draft = cur;
       const out = $('#out');
-      if (!draft.trim()) { out.innerHTML = ''; return; }
-      const toks = L.analyze(draft);
+      if (!cur.trim()) { out.innerHTML = ''; return; }
+      const toks = L.analyze(cur);
       const words = toks.filter((t) => t.word);
       const fixes = new Map();
       const hints = new Map();

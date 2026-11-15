@@ -69,6 +69,29 @@
     return items;
   };
 
+  /* The closing screen of a round: score, what to do next, and the missed items. */
+  function showResult(log, o) {
+    const right = log.filter((l) => l.ok).length;
+    const wrong = log.filter((l) => !l.ok);
+    if (o.onDone) o.onDone(log);
+    const showAns = (it) => (it.t === 'h' ? it.fix : it.t === 'o' ? (it.lead ? it.lead + ' ' : '') + it.a[0] : it.t === 't' ? it.a[0] : (it.q && it.q !== '___' && !it.plainQ ? it.q.replace('___', it.a) : it.a));
+    render(`
+      <div class="card stack">
+        ${o.daily ? `<div><h2>סיימת את הסשן של היום</h2><small>${S.streak()} ימים ברצף · ${S.todayCount()} תשובות היום${o.wrote ? ' · כתבת ' + o.wrote + ' מילים משלך' : ''}</small></div>` : ''}
+        <div><div class="result-num">${right}/${log.length}</div>
+        <p class="lead">${right === log.length ? 'הכול נכון. יישר כּוח!' : right / log.length >= 0.7 ? 'יפה. הטעויות נשמרו לחזרה.' : 'זה בדיוק החומר שכדאי לחזור עליו. הטעויות נשמרו.'}</p></div>
+        ${o.summary ? o.summary(log) : ''}
+        <div class="row">
+          ${o.daily ? `<a class="btn" href="${o.back}">סיימתי להיום</a>` : ''}
+          ${o.again ? `<a class="btn${o.daily ? ' ghost' : ''}" href="${o.again}" id="again">${o.daily ? 'עוד סשן' : 'סבב נוסף'}</a>` : ''}
+          ${o.daily ? '' : `<a class="btn ghost" href="${o.back}">חזרה</a>`}
+        </div>
+      </div>
+      ${wrong.length ? `<h3>לחזרה</h3><ul class="miss">${wrong.map((l) => `<li><span class="yi">${esc(showAns(l.it))}</span>${l.it.ex ? `<br><small>${Y.inline(l.it.ex)}</small>` : ''}</li>`).join('')}</ul>` : ''}`);
+    const again = $app.querySelector('#again');
+    if (again) again.addEventListener('click', (e) => { e.preventDefault(); route(true); });
+  }
+
   /* ================= exercise runner ================= */
 
   const KEYS = ['אַ', 'אָ', 'פּ', 'פֿ', 'ײַ', 'יִ', 'וּ', 'בֿ', 'כּ', 'שׂ', 'תּ', '־', '׳'].map((k) => Y.disp(k.normalize('NFD')));
@@ -403,25 +426,7 @@
     const finish = () => {
       enterHandler = null;
       if (o.then) return o.then(log);
-      const right = log.filter((l) => l.ok).length;
-      const wrong = log.filter((l) => !l.ok);
-      if (o.onDone) o.onDone(log);
-      const showAns = (it) => (it.t === 'h' ? it.fix : it.t === 'o' ? (it.lead ? it.lead + ' ' : '') + it.a[0] : it.t === 't' ? it.a[0] : (it.q && it.q !== '___' && !it.plainQ ? it.q.replace('___', it.a) : it.a));
-      render(`
-        <div class="card stack">
-          ${o.daily ? `<div><h2>סיימת את הסשן של היום</h2><small>${S.streak()} ימים ברצף · ${S.todayCount()} תשובות היום</small></div>` : ''}
-          <div><div class="result-num">${right}/${log.length}</div>
-          <p class="lead">${right === log.length ? 'הכול נכון. יישר כּוח!' : right / log.length >= 0.7 ? 'יפה. הטעויות נשמרו לחזרה.' : 'זה בדיוק החומר שכדאי לחזור עליו. הטעויות נשמרו.'}</p></div>
-          ${o.summary ? o.summary(log) : ''}
-          <div class="row">
-            ${o.daily ? `<a class="btn" href="${o.back}">סיימתי להיום</a>` : ''}
-            ${o.again ? `<a class="btn${o.daily ? ' ghost' : ''}" href="${o.again}" id="again">${o.daily ? 'עוד סשן' : 'סבב נוסף'}</a>` : ''}
-            ${o.daily ? '' : `<a class="btn ghost" href="${o.back}">חזרה</a>`}
-          </div>
-        </div>
-        ${wrong.length ? `<h3>לחזרה</h3><ul class="miss">${wrong.map((l) => `<li><span class="yi">${esc(showAns(l.it))}</span>${l.it.ex ? `<br><small>${Y.inline(l.it.ex)}</small>` : ''}</li>`).join('')}</ul>` : ''}`);
-      const again = $app.querySelector('#again');
-      if (again) again.addEventListener('click', (e) => { e.preventDefault(); route(true); });
+      showResult(log, o);
     };
 
     const step = () => {
@@ -492,7 +497,7 @@
       </div>` : `
       <div class="card hero stack">
         <div><small>${done ? 'היעד היומי הושג' : 'כרבע שעה'}</small><h2>${done ? 'רוצה עוד סשן?' : 'הסשן של היום'}</h2>
-        <p class="lead">${[due ? due + ' חזרות' : '', mist ? Math.min(mist, 3) + ' טעויות לתיקון' : '', 'תרגול של ' + nu.title.replace(/[{}]/g, '')].filter(Boolean).join(' · ')}</p></div>
+        <p class="lead">${[due ? due + ' חזרות' : '', mist ? Math.min(mist, 3) + ' טעויות לתיקון' : '', 'תרגול של ' + nu.title.replace(/[{}]/g, ''), 'משפט משלך'].filter(Boolean).join(' · ')}</p></div>
         <div class="row"><a class="btn" href="#/daily">${done ? 'עוד סשן' : 'להתחיל'}</a></div>
       </div>
 
@@ -703,29 +708,92 @@
     runSession(genItems(d.spec, d.n, d.unit), { back: '#/practice', again: '#/drill/' + id });
   }
 
-  /* Today's session: fix mistakes, review what is due, then practise the weakest and the next unit. */
-  function dailyItems() {
-    const items = S.state.mistakes.slice(0, 3).map((m) => Object.assign({}, m));
+  /* Today's session, in a fixed order: warm up with reviews, one new thing with its short explanation,
+     mixed practice ending on a proverb, and a sentence or two of her own writing. */
+  const WRITE_PROMPTS = ['מה עשית היום?', 'מה את רואה עכשיו מהחלון או בחדר?', 'ספרי על מישהו מהמשפחה.', 'מה תעשי מחר?', 'מה אכלת היום, ואיפה?', 'ספרי על מקום שאת אוהבת.', 'מה קרה השבוע שכדאי לזכור?'];
+
+  function viewDaily() {
+    const here = '#/daily';
+    const alive = () => location.hash === here;
     const t = S.today();
-    const personal = Y.shuffle((S.state.personal || []).filter((p) => { const st = S.srs(p.srs || p.key); return !st || st.d <= t; })).slice(0, 2);
-    items.push(...personal.map((p) => Object.assign({}, p)));
+    const all = [];
+    const dedupe = (items) => { const seen = new Set(); return items.filter((it) => { const k = it.key + '|' + (it.q || it.he); if (seen.has(k)) return false; seen.add(k); return true; }); };
+
+    // 1. warm-up: what is due and what went wrong last time
+    const warm = S.state.mistakes.slice(0, 3).map((m) => Object.assign({}, m));
+    warm.push(...Y.shuffle((S.state.personal || []).filter((p) => { const st = S.srs(p.srs || p.key); return !st || st.d <= t; })).slice(0, 2).map((p) => Object.assign({}, p)));
     const due = [];
-    for (const d of D.decks) for (const w of d.words) {
-      const s = S.srs('v:' + w.y);
-      if (s && s.d <= t) due.push([d.id, w]);
-    }
-    for (const [did, w] of Y.shuffle(due).slice(0, 3)) items.push(G.vocab(did, w));
-    for (let k = Math.min(due.length, 3); k < 2; k++) items.push(G.vocab(Y.pick(D.decks).id));
-    items.push(...genItems(['gender'], 2, 'b1'));
-    items.push(...genItems(['hunt'], 1), ...genItems(['proverb'], 1));
-    // units that faded or are still weak, then the next unit in the course
-    const started = D.units.filter((u) => S.mastery(u.id) !== null && S.mastery(u.id) < 0.85)
-      .sort((a, b) => S.mastery(a.id) - S.mastery(b.id)).slice(0, 2);
-    for (const u of started) items.push(...G.unitRound(u, 2));
+    for (const d of D.decks) for (const w of d.words) { const s = S.srs('v:' + w.y); if (s && s.d <= t) due.push([d.id, w]); }
+    for (const [did, w] of Y.shuffle(due).slice(0, 3)) warm.push(G.vocab(did, w));
+    if (!due.length) warm.push(G.vocab(Y.pick(D.decks).id));
+    warm.push(...genItems(['gender'], 1, 'b1'));
+
+    // 2. the new thing: the next step of the next unit, if it still has steps to go
     const nu = nextUnit();
-    items.push(...G.unitRound(nu, started.some((u) => u.id === nu.id) ? 2 : 4));
-    const seen = new Set();
-    return Y.shuffle(items.filter((it) => { const k = it.key + '|' + (it.q || it.he); if (seen.has(k)) return false; seen.add(k); return true; })).slice(0, 15);
+    const steps = D.steps[nu.id];
+    const at = (S.state.units[nu.id] || {}).step || 0;
+    const hasNew = !!steps && at < steps.length;
+
+    // 3. mixed: units that faded or are still weak, a proofreading item, and a proverb to end on
+    const weak = D.units.filter((u) => S.mastery(u.id) !== null && S.mastery(u.id) < 0.85 && !(hasNew && u.id === nu.id))
+      .sort((a, b) => S.mastery(a.id) - S.mastery(b.id)).slice(0, 2);
+    const mixed = [];
+    for (const u of weak) mixed.push(...G.unitRound(u, 2));
+    if (!hasNew) mixed.push(...G.unitRound(nu, 4));
+    mixed.push(...genItems(['hunt'], 1));
+    const last = genItems(['proverb'], 1);
+
+    const parts = hasNew ? 3 : 2;
+    const note = (k, name) => `חלק ${k} מתוך ${parts} · ${name}`;
+    const opts = (extra) => Object.assign({ back: '#/home' }, extra);
+    const keep = (next) => (log) => { all.push(...log); if (alive()) next(); };
+
+    const result = (wrote) => showResult(all, { back: '#/home', again: here, daily: true, wrote });
+
+    const write = () => {
+      const topic = WRITE_PROMPTS[t % WRITE_PROMPTS.length];
+      Y.views.check({
+        head: `<div class="run-note">ולסיום · כתיבה משלך</div>
+          <h2 style="margin-top:0">משפט או שניים ביידיש</h2>
+          <p class="lead">${esc(topic)} ${hasNew || weak.length ? `אם מתאים, נסי לשלב את מה שתרגלת היום: ${Y.inline((hasNew ? nu : weak[0]).title)}.` : ''}</p>
+          <p><small>כותבים כמו שיוצא. הכתיב נבדק תוך כדי, ומילה שתתקני תחזור כתרגיל אישי.</small></p>`,
+        foot: '<div class="row" style="margin-top:20px"><button class="btn" id="wdone">סיימתי</button><button class="btn ghost" id="wskip">לדלג היום</button></div>',
+      });
+      const txt = $app.querySelector('#txt');
+      $app.querySelector('#wdone').addEventListener('click', () => result((txt.value.trim().match(/\S+/g) || []).length));
+      $app.querySelector('#wskip').addEventListener('click', () => result(0));
+    };
+
+    const runMixed = () => runSession(dedupe(Y.shuffle(mixed)).concat(last), opts({ note: note(parts, 'תרגול מעורב'), then: keep(write) }));
+
+    const runNew = () => {
+      const st = steps[at];
+      const blocks = nu.text.split(/\n\s*\n/);
+      const text = st[0].map((b) => blocks[b]).join('\n\n');
+      const items = G.stepItems(nu, st[1], 4);
+      const advance = () => { S.unit(nu.id).step = Math.max(S.unit(nu.id).step || 0, at + 1); S.save(); runMixed(); };
+      const explain = () => {
+        if (!alive()) return;
+        render(`<div class="run-note">${note(2, 'הדבר החדש של היום')}</div>
+          <h2 style="margin-top:0">${Y.inline(nu.title)}</h2>
+          <p><small>צעד ${at + 1} מתוך ${steps.length} ביחידה</small></p>
+          <div class="lesson step-text">${Y.fmt(text)}</div>
+          <div class="row" style="margin-top:20px"><button class="btn" id="go">${items.length ? 'לתרגל את זה' : 'הבנתי, הלאה'}</button></div>`);
+        const go = () => {
+          enterHandler = null;
+          if (!items.length) return advance();
+          runSession(items, opts({ unitId: nu.id, ruleText: text, note: note(2, 'הדבר החדש של היום'), then: (log) => { all.push(...log); if (alive()) advance(); } }));
+        };
+        $app.querySelector('#go').addEventListener('click', go);
+        enterHandler = go;
+      };
+      // ask first, explain afterwards
+      const first = st[1].map((i) => G.fromTuple(nu.ex[i], nu.id, i)).find((x) => x && x.t === 'm');
+      if (!first) return explain();
+      runSession([first], opts({ unitId: nu.id, noRule: true, noRetry: true, noRecord: true, pre: true, note: note(2, 'לפני ההסבר: איך היית אומרת?'), then: explain }));
+    };
+
+    runSession(dedupe(Y.shuffle(warm)), opts({ note: note(1, 'חימום: חזרות'), then: keep(hasNew ? runNew : runMixed) }));
   }
 
   /* Placement: two questions per unit (one multiple choice, one typed); a unit passes only with both right. */
@@ -1186,7 +1254,7 @@
     if (a === 'practice') return viewPractice();
     if (a === 'track') return Y.views.track(b, c);
     if (a === 'drill') return viewDrill(b);
-    if (a === 'daily') return runSession(dailyItems(), { back: '#/home', again: '#/daily', daily: true });
+    if (a === 'daily') return viewDaily();
     if (a === 'personal') return runSession(Y.shuffle((S.state.personal || []).slice()).slice(0, 12).map((x) => Object.assign({}, x)), { back: '#/practice', again: '#/personal' });
     if (a === 'read') return Y.views.read(b);
     if (a === 'review') return Y.views.review();
