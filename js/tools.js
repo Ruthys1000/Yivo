@@ -19,6 +19,7 @@
         <a class="tile" href="#/lab"><b>מעבדת יחסות</b><small>בוחרים שם עצם ותואר ורואים איך הצירוף משתנה.</small></a>
         <a class="tile" href="#/ref"><b>טבלאות</b><small>כל טבלאות הדקדוק במקום אחד.</small></a>
         <a class="tile" href="#/ai"><b>המורה</b><small>${Y.ai.enabled() ? 'בדיקת דקדוק מלאה, שאלות ושיחה עם Claude.' : 'חיבור אופציונלי ל-Claude לבדיקת דקדוק ולשאלות.'}</small></a>
+        <a class="tile" href="#/flags"><span class="num">${(Y.store.state.flags || []).length || ''}</span><b>שאלות למורה</b><small>תרגילים שסימנת לבירור בשיעור, ודף התוכן לבדיקת מורה.</small></a>
       </div>`);
   };
 
@@ -319,7 +320,7 @@
       if (e[0] === 'b') return `${esc(e[1])} ← ${yi(e[2])} <small>מילים מיותרות: ${yi(e[3])}</small>`;
       return `${yi(e[1] + ' ' + e[2])} <small>${esc(e[3] || '')}</small>`;
     };
-    Y.ui.render(`<a class="crumb noprint" href="#/settings">→ הגדרות</a>
+    Y.ui.render(`<a class="crumb noprint" href="#/flags">→ שאלות למורה</a>
       <h1>דף לבדיקת מורה</h1>
       <p class="lead">כל התוכן היידי של הכלי "ייִדיש כּהלכה". התוכן נכתב לפי כללי ייִוואָ אך לא נבדק בידי מומחה. נודה על כל תיקון: מין של שם עצם, צורת בינוני, כתיב, ניסוח של כלל או משפט לא טבעי.</p>
       <div class="row noprint" style="margin:12px 0"><button class="btn" id="pr">הדפסה / שמירה כ-PDF</button></div>

@@ -90,7 +90,7 @@
         <a class="x" href="${o.back}" aria-label="סגירה">×</a>
         <div class="bar"><i style="width:${(i / items.length) * 100}%"></i></div>
         <span class="cnt">${Math.min(i + 1, items.length)}/${items.length}</span>
-      </div>`;
+      </div>${items[i] && items[i].retry ? '<div class="again-tag">שוב · טעית בה קודם, עכשיו מהזיכרון</div>' : ''}`;
 
     /* "Show the rule": the unit's explanation, available while answering. */
     let ruleOpen = false;
@@ -116,8 +116,15 @@
       : (it.he ? it.he + ' · ' : '') + (it.q || ''));
 
     const feedback = (it, ok, shown, extra, given) => {
-      S.answer(it, ok);
-      log.push({ it, ok });
+      // a repeated question is practice only: progress and the score keep the first attempt
+      if (!it.retry) {
+        S.answer(it, ok);
+        log.push({ it, ok });
+        // a missed question comes back once, a few questions later, to be answered from memory
+        if (!ok && !o.noRetry) items.splice(Math.min(i + 4, items.length), 0, Object.assign({}, it, { retry: true }));
+      }
+      // after a typed mistake the standard form is typed out before moving on
+      const retype = !ok && it.t === 't' && !o.noRetry;
       const u = it.unit && !o.unitId ? unitById(it.unit) : null;
       const ctx = { q: describe(it), given: given || '', correct: shown, ex: (it.ex || '').replace(/[{}]/g, ''), unit: u ? u.title.replace(/[{}]/g, '') : '' };
       const box = document.createElement('div');
@@ -127,8 +134,11 @@
         ${extra ? `<p>${extra}</p>` : ''}
         ${ok && !extra ? '' : `<p class="ans">${esc(shown)}</p>`}
         ${it.ex ? `<p>${Y.inline(it.ex)}</p>` : ''}
+        ${retype ? `<label class="field retype"><span>הקלידי את הצורה התקנית כדי להמשיך</span>
+          <input class="type-in" id="re" type="text" lang="yi" dir="rtl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>` : ''}
         <div class="row">
-          <button class="btn" id="next">${i + 1 >= items.length ? 'סיום' : 'הבא'}</button>
+          <button class="btn" id="next"${retype ? ' disabled' : ''}>${i + 1 >= items.length ? 'סיום' : 'הבא'}</button>
+          ${retype ? '<button class="linkbtn" id="skipre">להמשיך בלי להקליד</button>' : ''}
           ${!ok && u ? `<a class="btn ghost small" href="#/unit/${u.id}">ליחידה: ${Y.inline(u.title)}</a>` : ''}
         </div>
         <div class="row helprow">
@@ -138,13 +148,26 @@
         <div id="whybox"></div>`);
       $app.appendChild(box);
       const go = () => { enterHandler = null; i++; step(); };
-      box.querySelector('#next').addEventListener('click', go);
-      setTimeout(() => { enterHandler = go; }, 150);
+      const nextBtn = box.querySelector('#next');
+      nextBtn.addEventListener('click', go);
+      if (retype) {
+        const re = box.querySelector('#re');
+        const skip = box.querySelector('#skipre');
+        const match = () => [shown].concat(Array.isArray(it.a) ? it.a : []).some((a) => Y.bare(a) === Y.bare(re.value.trim()));
+        re.addEventListener('input', () => {
+          const m = match();
+          nextBtn.disabled = !m;
+          re.style.borderColor = m ? 'var(--ok)' : '';
+          if (m) skip.hidden = true;
+        });
+        skip.addEventListener('click', () => { nextBtn.disabled = false; skip.hidden = true; nextBtn.focus(); });
+        setTimeout(() => { enterHandler = () => { if (!nextBtn.disabled) go(); }; re.focus({ preventScroll: true }); }, 150);
+      } else setTimeout(() => { enterHandler = go; }, 150);
       box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 
       box.querySelector('#flag').addEventListener('click', (e) => {
         S.addFlag({ q: ctx.q, given: ctx.given, correct: ctx.correct, ex: ctx.ex, unit: ctx.unit, day: S.today() });
-        e.target.textContent = 'נשמר ב"שאלות למורה" (בהגדרות)';
+        e.target.textContent = 'נשמר ב"שאלות למורה" (בכלים)';
         e.target.disabled = true;
       });
 
@@ -430,7 +453,14 @@
     const groups = D.groups.map((g) => {
       const us = D.units.filter((u) => u.group === g.id);
       const avg = us.reduce((a, u) => a + (S.mastery(u.id) || 0), 0) / us.length;
-      return `<div class="prog-row"><div><div class="lbl">${esc(g.title)}</div><div class="bar"><i style="width:${pct(avg)}%"></i></div></div><div class="pct">${pct(avg)}%</div></div>`;
+      const cells = us.map((u, k) => {
+        const m = S.mastery(u.id);
+        const lvl = m === null ? (S.state.diag && S.state.diag[u.id] === 0 ? 'w' : '0') : m >= 0.85 ? '3' : m >= 0.5 ? '2' : '1';
+        const name = u.title.replace(/[{}]/g, '');
+        return `<a class="cell l${lvl}" href="#/unit/${u.id}" title="${esc(name)}${m === null ? '' : ' · ' + pct(m) + '%'}" aria-label="${esc(name)}"><span>${k + 1}</span></a>`;
+      }).join('');
+      return `<div class="prog-row"><div><div class="lbl">${esc(g.title)}</div><div class="bar"><i style="width:${pct(avg)}%"></i></div></div><div class="pct">${pct(avg)}%</div></div>
+        <div class="map">${cells}</div>`;
     }).join('');
 
     render(`<div class="stack">
@@ -451,8 +481,7 @@
         <div class="row"><a class="btn" href="#/daily">${done ? 'עוד סשן' : 'להתחיל'}</a></div>
       </div>
 
-      <a class="tile next" href="#/unit/${nu.id}"><small>הנושא הבא במסלול</small><b>${Y.inline(nu.title)}</b><small>${Y.inline(nu.sub)}</small></a>
-      <a class="tile next" href="#/track"><small>מסלול נפרד, צעד אחד בכל פעם</small><b><span class="yi">דער · די · דאָס</span> מההתחלה</b><small>שש מילים בכל פעם: מין, תואר, <span class="yi">דעם</span>, <span class="yi">מײַן</span></small></a>`}
+      <p class="alt-links">או ישר אל: <a href="#/unit/${nu.id}">הנושא הבא · ${Y.inline(nu.title)}</a><a href="#/track"><span class="yi">דער · די · דאָס</span> מההתחלה</a><a href="#/practice">תרגול חופשי</a></p>`}
 
       <div class="card">
         <div class="stats">
@@ -471,13 +500,8 @@
       </div>
 
       <div class="card"><h2 style="margin-bottom:12px">התקדמות</h2>${groups}
-        <div class="map" aria-label="מפת היחידות">${D.units.map((u) => {
-          const m = S.mastery(u.id);
-          const lvl = m === null ? (S.state.diag && S.state.diag[u.id] === 0 ? 'w' : '0') : m >= 0.85 ? '3' : m >= 0.5 ? '2' : '1';
-          return `<a class="cell l${lvl}" href="#/unit/${u.id}" title="${esc(u.title)}${m === null ? '' : ' · ' + pct(m) + '%'}"><span>${u.id.toUpperCase()}</span></a>`;
-        }).join('')}</div>
         <p class="legend"><i class="cell l0"></i>חדש <i class="cell lw"></i>לחזק <i class="cell l1"></i>התחלתי <i class="cell l2"></i>בדרך <i class="cell l3"></i>יושב</p>
-        <p style="margin:12px 0 0"><small>יחידה "יושבת" אחרי תרגול טוב בשלושה ימים שונים. ציון שלא תורגל כמה שבועות דועך.</small></p>
+        <p style="margin:12px 0 0"><small>כל ריבוע הוא יחידה, לפי הסדר בפרק. יחידה "יושבת" אחרי תרגול טוב בשלושה ימים שונים. ציון שלא תורגל כמה שבועות דועך.</small></p>
         ${fresh ? '' : '<p style="margin:8px 0 0"><a href="#/diag">אבחון</a></p>'}
       </div>
       ${backupOld && !Y.sync.enabled() ? '<p class="note tip"><b>גיבוי</b>ההתקדמות נשמרת רק בדפדפן הזה. עבר יותר מחודש מאז הגיבוי האחרון. אפשר <a href="#/settings">להפעיל סנכרון או לייצא קובץ</a>.</p>' : ''}
@@ -553,23 +577,26 @@
 
   function viewPractice() {
     const mist = S.state.mistakes.length;
+    const tile = (d) => `<a class="tile" href="#/drill/${d.id}"><b>${Y.inline(d.title)}</b><small>${Y.inline(d.sub)}</small></a>`;
     render(`<h1>תרגול</h1>
-      <p class="lead">תרגילים שנוצרים מחדש בכל פעם, כך שאפשר לחזור עליהם כמה שרוצים.</p>
-      <div class="grid" style="margin-top:16px">
+      <div class="card hero stack" style="margin-top:12px">
+        <div><h2>הסשן של היום</h2><p class="lead">חזרות, טעויות והנושא הבא, בסדר שמתאים לך. אם לא בטוחה מה לתרגל, זה המקום.</p></div>
+        <div class="row"><a class="btn" href="#/daily">להתחיל</a></div>
+      </div>
+      <div class="grid" style="margin-top:12px">
         <a class="tile" href="#/track"><b><span class="yi">דער · די · דאָס</span> מההתחלה</b><small>מסלול בצעדים קטנים: שש מילים בכל פעם</small></a>
-        <a class="tile" href="#/daily"><b>הסשן של היום</b><small>חזרות, טעויות והנושא הבא, בסדר שמתאים לך</small></a>
         <a class="tile" href="#/mistakes"><span class="num">${mist || ''}</span><b>הטעויות שלי</b><small>חזרה על שאלות שטעית בהן</small></a>
         <a class="tile" href="#/personal"><span class="num">${(S.state.personal || []).length || ''}</span><b>התרגילים שלי</b><small>${(S.state.personal || []).length ? 'נבנו מתיקונים בטקסטים שכתבת' : 'ייבנו מתיקונים בבודק הכתיב ואצל המורה'}</small></a>
       </div>
-      <h3>משחקים</h3>
+      <details class="fold"><summary>משחקים <small>${GAMES.length + 1}</small></summary>
       <div class="grid">
         <a class="tile" href="#/blitz"><span class="num">${S.best('blitz') || ''}</span><b>בליץ <span class="yi">דער · די · דאָס</span></b><small>60 שניות, כמה שיותר מילים</small></a>
-        ${GAMES.map((d) => `<a class="tile" href="#/drill/${d.id}"><b>${Y.inline(d.title)}</b><small>${Y.inline(d.sub)}</small></a>`).join('')}
-      </div>
-      <h3>תרגילי שינון</h3>
+        ${GAMES.map(tile).join('')}
+      </div></details>
+      <details class="fold"><summary>תרגילי שינון לפי נושא <small>${DRILLS.length}</small></summary>
       <div class="grid">
-        ${DRILLS.map((d) => `<a class="tile" href="#/drill/${d.id}"><b>${Y.inline(d.title)}</b><small>${Y.inline(d.sub)}</small></a>`).join('')}
-      </div>`);
+        ${DRILLS.map(tile).join('')}
+      </div></details>`);
   }
 
   function viewDrill(id) {
@@ -637,6 +664,7 @@
     runSession(items, {
       back: '#/diag',
       noRule: true,
+      noRetry: true,
       unitId: 'diag',
       onDone(log) {
         const res = {};
@@ -908,6 +936,30 @@
     render(`<a class="crumb" href="#/tools">→ כלים</a><h1>טבלאות</h1><p class="lead">כל הטבלאות במקום אחד, לעיון מהיר בזמן כתיבה.</p><div class="lesson">${Y.fmt(REF)}</div>`);
   }
 
+  /* ---------- questions for the teacher ---------- */
+
+  function viewFlags() {
+    render(`<a class="crumb" href="#/tools">→ כלים</a><h1>שאלות למורה</h1>
+      <div class="card stack">
+        ${(S.state.flags || []).length ? `
+        <p style="margin:0"><small>תרגילים שסימנת ב"לשאול את המורה". אפשר להעתיק את כולם ולשלוח.</small></p>
+        <ul class="miss" style="margin:0">${S.state.flags.map((f, k) => `<li><span class="yi">${esc(f.q)}</span><br><small>התשובה בכלי: <span class="yi">${esc(f.correct)}</span>${f.given ? ' · עניתי: <span class="yi">' + esc(f.given) + '</span>' : ''}</small> <button class="linkbtn" data-unflag="${k}">הסרה</button></li>`).join('')}</ul>
+        <div class="row"><button class="btn ghost small" id="cpflags">העתקת כל השאלות</button></div>` : '<p style="margin:0"><small>אחרי כל תרגיל יש כפתור "לשאול את המורה". מה שתסמני שם ייאסף כאן, כדי שתוכלי לברר אותו בשיעור.</small></p>'}
+      </div>
+
+      <h3>בדיקת התוכן</h3>
+      <div class="card stack">
+        <p style="margin:0"><small>כל היידיש שבכלי בדף אחד, מסודר להדפסה או לשליחה: שמות העצם לפי מין, הפעלים, הכתיב, המילים, הטקסטים והתרגילים. מיועד למורה שתעבור על התוכן.</small></p>
+        <div class="row"><a class="btn ghost small" href="#/review">דף לבדיקת מורה</a></div>
+      </div>`);
+    $app.querySelectorAll('[data-unflag]').forEach((b) => b.addEventListener('click', () => { S.removeFlag(+b.dataset.unflag); viewFlags(); }));
+    const cpf = $app.querySelector('#cpflags');
+    if (cpf) cpf.addEventListener('click', async () => {
+      const text = 'שאלות על תרגילים מהכלי "ייִדיש כּהלכה":\n\n' + S.state.flags.map((f, k) => `${k + 1}. ${f.q}\n   התשובה בכלי: ${f.correct}${f.given ? '\n   אני עניתי: ' + f.given : ''}${f.ex ? '\n   ההסבר בכלי: ' + f.ex : ''}`).join('\n\n');
+      try { await navigator.clipboard.writeText(text); cpf.textContent = 'הועתק'; } catch (e) { cpf.textContent = 'ההעתקה נחסמה'; }
+    });
+  }
+
   /* ---------- settings ---------- */
 
   function viewSettings(msg) {
@@ -926,20 +978,6 @@
         <label class="field"><span>מפתח API</span><input id="key" type="password" dir="ltr" autocomplete="off" placeholder="sk-ant-..." value="${esc(st.apiKey)}"></label>
         <label class="field"><span>מודל</span><select id="model">${Y.ai.MODELS.map(([id, name]) => `<option value="${id}" ${st.model === id ? 'selected' : ''}>${name}</option>`).join('')}</select></label>
         <div class="row"><button class="btn small" id="savekey">שמירה</button>${st.apiKey ? '<button class="btn ghost small" id="delkey">מחיקת המפתח</button>' : ''}</div>
-      </div>
-
-      <h3>שאלות למורה</h3>
-      <div class="card stack">
-        ${(S.state.flags || []).length ? `
-        <p style="margin:0"><small>תרגילים שסימנת ב"לשאול את המורה". אפשר להעתיק את כולם ולשלוח.</small></p>
-        <ul class="miss" style="margin:0">${S.state.flags.map((f, k) => `<li><span class="yi">${esc(f.q)}</span><br><small>התשובה בכלי: <span class="yi">${esc(f.correct)}</span>${f.given ? ' · עניתי: <span class="yi">' + esc(f.given) + '</span>' : ''}</small> <button class="linkbtn" data-unflag="${k}">הסרה</button></li>`).join('')}</ul>
-        <div class="row"><button class="btn ghost small" id="cpflags">העתקת כל השאלות</button></div>` : '<p style="margin:0"><small>אחרי כל תרגיל יש כפתור "לשאול את המורה". מה שתסמני שם ייאסף כאן, כדי שתוכלי לברר אותו בשיעור.</small></p>'}
-      </div>
-
-      <h3>בדיקת התוכן</h3>
-      <div class="card stack">
-        <p style="margin:0"><small>כל היידיש שבכלי בדף אחד, מסודר להדפסה או לשליחה: שמות העצם לפי מין, הפעלים, הכתיב, המילים, הטקסטים והתרגילים. מיועד למורה שתעבור על התוכן.</small></p>
-        <div class="row"><a class="btn ghost small" href="#/review">דף לבדיקת מורה</a></div>
       </div>
 
       <h3>סנכרון בין מכשירים</h3>
@@ -977,12 +1015,6 @@
         </div>
       </div>`);
     $app.querySelector('#strict').addEventListener('change', (e) => S.setSetting('strict', e.target.checked));
-    $app.querySelectorAll('[data-unflag]').forEach((b) => b.addEventListener('click', () => { S.removeFlag(+b.dataset.unflag); viewSettings(); }));
-    const cpf = $app.querySelector('#cpflags');
-    if (cpf) cpf.addEventListener('click', async () => {
-      const text = 'שאלות על תרגילים מהכלי "ייִדיש כּהלכה":\n\n' + S.state.flags.map((f, k) => `${k + 1}. ${f.q}\n   התשובה בכלי: ${f.correct}${f.given ? '\n   אני עניתי: ' + f.given : ''}${f.ex ? '\n   ההסבר בכלי: ' + f.ex : ''}`).join('\n\n');
-      try { await navigator.clipboard.writeText(text); cpf.textContent = 'הועתק'; } catch (e) { cpf.textContent = 'ההעתקה נחסמה'; }
-    });
     const smsg = (t, bad) => { $app.querySelector('#syncmsg').innerHTML = t ? `<p class="${bad ? 'alert' : ''}" style="margin:0">${t}</p>` : ''; };
     const son = $app.querySelector('#syncon');
     if (son) son.addEventListener('click', async () => {
@@ -1046,7 +1078,7 @@
     document.querySelectorAll('#nav a').forEach((n) => {
       const on = n.dataset.r === a || (n.dataset.r === 'learn' && ['unit', 'diag', 'read'].includes(a)) ||
         (n.dataset.r === 'practice' && ['drill', 'daily', 'mistakes', 'blitz', 'personal'].includes(a)) ||
-        (n.dataset.r === 'tools' && ['check', 'dict', 'lab', 'ai', 'ref'].includes(a)) ||
+        (n.dataset.r === 'tools' && ['check', 'dict', 'lab', 'ai', 'ref', 'flags', 'review'].includes(a)) ||
         (n.dataset.r === 'words' && ['deck', 'mywords'].includes(a));
       n.classList.toggle('on', on);
       if (on) n.setAttribute('aria-current', 'page'); else n.removeAttribute('aria-current');
@@ -1067,6 +1099,7 @@
     if (a === 'mywords') return runSession(Y.shuffle(S.state.mywords).slice(0, 12).map((w) => G.myword(w)), { back: '#/words', again: '#/mywords' });
     if (a === 'ai') return viewAi(b === 'chat' ? 'chat' : 'check');
     if (a === 'ref') return viewRef();
+    if (a === 'flags') return viewFlags();
     if (a === 'tools') return Y.views.tools();
     if (a === 'check') return Y.views.check();
     if (a === 'dict') return Y.views.dict();

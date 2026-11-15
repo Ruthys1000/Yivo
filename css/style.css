@@ -442,3 +442,16 @@ ol.dense li { margin-bottom: 4px; }
 .steps { display: grid; gap: 10px; }
 .steps .tile b { font-size: 1.1rem; margin: 2px 0; }
 .steps .tile.next, .grid .tile.next { border-color: var(--accent); border-width: 1.5px; }
+
+/* repeated question, retyping after a mistake, folded sections, secondary links */
+.again-tag { display: inline-block; margin: 0 0 8px; padding: 2px 10px; border-radius: 999px; background: var(--gold-soft); color: var(--gold); font-size: .8rem; font-weight: 700; }
+.fb .retype { margin-top: 12px; }
+.fb .retype .type-in { margin-top: 4px; background: var(--card); }
+.fb .btn:disabled { opacity: .5; cursor: default; }
+.alt-links { margin: 0 2px; font-size: .92rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.prog-row + .map { margin-top: 8px; }
+.map + .prog-row { margin-top: 18px; }
+details.fold { margin-top: 20px; }
+details.fold summary { cursor: pointer; font-weight: 700; font-size: 1.05rem; padding: 10px 2px; }
+details.fold summary small { color: var(--muted); font-weight: 600; margin-inline-start: 6px; }
+details.fold .grid { margin-top: 8px; }
