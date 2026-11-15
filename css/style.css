@@ -455,3 +455,14 @@ details.fold { margin-top: 20px; }
 details.fold summary { cursor: pointer; font-weight: 700; font-size: 1.05rem; padding: 10px 2px; }
 details.fold summary small { color: var(--muted); font-weight: 600; margin-inline-start: 6px; }
 details.fold .grid { margin-top: 8px; }
+
+/* a unit in small steps */
+.run-note { font-size: .8rem; font-weight: 700; color: var(--muted); margin: 0 0 6px; }
+.fb.pre { background: var(--gold-soft); }
+.fb.pre h4 { color: var(--gold); }
+.step-dots { display: flex; gap: 6px; margin: 4px 0 14px; }
+.step-dots i { flex: 1; height: 5px; border-radius: 3px; background: var(--line); }
+.step-dots i.done { background: var(--ok); }
+.step-dots i.on { background: var(--accent); }
+.step-text { font-size: 1.04rem; }
+details.fold .lesson { margin-top: 4px; }

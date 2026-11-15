@@ -90,7 +90,7 @@
         <a class="x" href="${o.back}" aria-label="סגירה">×</a>
         <div class="bar"><i style="width:${(i / items.length) * 100}%"></i></div>
         <span class="cnt">${Math.min(i + 1, items.length)}/${items.length}</span>
-      </div>${items[i] && items[i].retry ? '<div class="again-tag">שוב · טעית בה קודם, עכשיו מהזיכרון</div>' : ''}`;
+      </div>${o.note ? `<div class="run-note">${o.note}</div>` : ''}${items[i] && items[i].retry ? '<div class="again-tag">שוב · טעית בה קודם, עכשיו מהזיכרון</div>' : ''}`;
 
     /* "Show the rule": the unit's explanation, available while answering. */
     let ruleOpen = false;
@@ -100,7 +100,7 @@
       const d = document.createElement('details');
       d.className = 'rule';
       d.open = ruleOpen;
-      d.innerHTML = Y.disp(`<summary>הצג את הכלל · ${Y.inline(u.title)}</summary><div class="lesson">${Y.fmt(u.text)}</div>`);
+      d.innerHTML = Y.disp(`<summary>הצג את הכלל · ${Y.inline(u.title)}</summary><div class="lesson">${Y.fmt(o.ruleText || u.text)}</div>`);
       d.addEventListener('toggle', () => { ruleOpen = d.open; });
       $app.appendChild(d);
     };
@@ -117,7 +117,7 @@
 
     const feedback = (it, ok, shown, extra, given) => {
       // a repeated question is practice only: progress and the score keep the first attempt
-      if (!it.retry) {
+      if (!it.retry && !o.noRecord) {
         S.answer(it, ok);
         log.push({ it, ok });
         // a missed question comes back once, a few questions later, to be answered from memory
@@ -129,6 +129,20 @@
       const ctx = { q: describe(it), given: given || '', correct: shown, ex: (it.ex || '').replace(/[{}]/g, ''), unit: u ? u.title.replace(/[{}]/g, '') : '' };
       const box = document.createElement('div');
       box.className = 'fb ' + (ok ? 'ok' : 'no');
+      // before the explanation: no verdict and no reasons yet, only what the standard has
+      if (o.pre) {
+        log.push({ it, ok });
+        box.className = 'fb pre';
+        box.innerHTML = Y.disp(`<h4>${ok ? 'כך גם בתקן' : 'בתקן'}</h4><p class="ans">${esc(shown)}</p>
+          <p><small>${ok ? 'מייד נראה למה.' : 'זו לא טעות שלך: כך מדברים בבית. מייד נראה מה הכלל בתקן.'}</small></p>
+          <div class="row"><button class="btn" id="next">${i + 1 >= items.length ? 'להסבר' : 'הבא'}</button></div>`);
+        $app.appendChild(box);
+        const goPre = () => { enterHandler = null; i++; step(); };
+        box.querySelector('#next').addEventListener('click', goPre);
+        setTimeout(() => { enterHandler = goPre; }, 150);
+        box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        return;
+      }
       box.innerHTML = Y.disp(`
         <h4>${ok ? 'נכון' : 'התשובה לפי התקן'}</h4>
         ${extra ? `<p>${extra}</p>` : ''}
@@ -137,7 +151,7 @@
         ${retype ? `<label class="field retype"><span>הקלידי את הצורה התקנית כדי להמשיך</span>
           <input class="type-in" id="re" type="text" lang="yi" dir="rtl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>` : ''}
         <div class="row">
-          <button class="btn" id="next"${retype ? ' disabled' : ''}>${i + 1 >= items.length ? 'סיום' : 'הבא'}</button>
+          <button class="btn" id="next"${retype ? ' disabled' : ''}>${i + 1 >= items.length ? (o.then ? 'הלאה' : 'סיום') : 'הבא'}</button>
           ${retype ? '<button class="linkbtn" id="skipre">להמשיך בלי להקליד</button>' : ''}
           ${!ok && u ? `<a class="btn ghost small" href="#/unit/${u.id}">ליחידה: ${Y.inline(u.title)}</a>` : ''}
         </div>
@@ -247,7 +261,7 @@
         btns.forEach((x, j) => {
           x.disabled = true;
           if (right(opts[j])) x.classList.add('right');
-          else if (j === k) x.classList.add('wrong');
+          else if (j === k) x.classList.add(o.pre ? 'dim' : 'wrong');
           else x.classList.add('dim');
         });
         const qt = $app.querySelector('.q-text');
@@ -388,6 +402,7 @@
 
     const finish = () => {
       enterHandler = null;
+      if (o.then) return o.then(log);
       const right = log.filter((l) => l.ok).length;
       const wrong = log.filter((l) => !l.ok);
       if (o.onDone) o.onDone(log);
@@ -541,10 +556,22 @@
       <div class="row" style="justify-content:space-between"><h1>${Y.inline(u.title)}</h1>${badge(u.id)}</div>
       <p class="lead">${Y.inline(u.sub)}</p>
       ${(() => { const mi = S.masteryInfo(u.id); return mi ? `<p><small>דיוק ${pct(mi.acc)}% · ימי תרגול טובים: ${mi.days} מתוך 3${mi.stale ? ' · לא תורגל זמן רב, כדאי לחזור' : ''}</small></p>` : ''; })()}
-      <div class="row" style="margin:16px 0"><a class="btn" href="#/unit/${u.id}/go">תרגול</a></div>
-      <div class="lesson">${Y.fmt(u.text)}</div>
+      ${(() => {
+        const n = (D.steps[u.id] || []).length;
+        const at = (S.state.units[u.id] || {}).step || 0;
+        const started = !!S.masteryInfo(u.id);
+        if (!n) return `<div class="row" style="margin:16px 0"><a class="btn" href="#/unit/${u.id}/go">תרגול</a></div><div class="lesson">${Y.fmt(u.text)}</div>`;
+        return `<div class="card stack" style="margin:16px 0">
+          <div><b>${at >= n ? 'עברת על כל הצעדים' : at ? `צעד ${at + 1} מתוך ${n}` : `${n} צעדים קצרים`}</b><br>
+          <small>${at >= n ? 'עכשיו תרגול מעורב, עד שהיחידה יושבת. אפשר גם לעבור שוב על הצעדים.' : 'קודם כמה שאלות בלי הסבר, ואז דבר אחד בכל פעם: כלל קצר ומייד תרגול שלו.'}</small></div>
+          <div class="row">${at >= n
+            ? `<a class="btn" href="#/unit/${u.id}/go">תרגול מעורב · 10 שאלות</a><a class="btn ghost" href="#/unit/${u.id}/steps">שוב בצעדים</a>`
+            : `<a class="btn" href="#/unit/${u.id}/steps">${at ? 'להמשיך בצעדים' : 'ללמוד בצעדים'}</a><a class="btn ghost" href="#/unit/${u.id}/go">ישר לתרגול</a>`}</div>
+        </div>
+        <details class="fold"${at >= n || started ? ' open' : ''}><summary>כל ההסבר בדף אחד</summary><div class="lesson">${Y.fmt(u.text)}</div></details>`;
+      })()}
       <div class="row" style="margin-top:24px">
-        <a class="btn" href="#/unit/${u.id}/go">תרגול · 10 שאלות</a>
+        ${D.steps[u.id] ? '' : `<a class="btn" href="#/unit/${u.id}/go">תרגול · 10 שאלות</a>`}
         ${Y.ai.enabled() ? `<button class="btn ghost" id="aiex">תרגילים חדשים מהמורה</button>` : ''}
       </div>
       <div id="aimsg"></div>
@@ -567,6 +594,77 @@
         b.disabled = false;
       }
     });
+  }
+
+  /* A unit in small steps: a few questions before any explanation, then one piece of the rule at a time, each followed by its own practice. */
+  function viewUnitSteps(id) {
+    const u = unitById(id);
+    const steps = u && D.steps[id];
+    if (!steps) return viewUnit(id);
+    const blocks = u.text.split(/\n\s*\n/);
+    const back = '#/unit/' + id;
+    const here = '#/unit/' + id + '/steps';
+    const alive = () => location.hash === here;
+    const n = steps.length;
+    const textOf = (k) => steps[k][0].map((b) => blocks[b]).join('\n\n');
+    const dots = (k) => `<div class="step-dots" aria-label="צעד ${k + 1} מתוך ${n}">${steps.map((_, j) => `<i class="${j < k ? 'done' : j === k ? 'on' : ''}"></i>`).join('')}</div>`;
+
+    const done = () => {
+      const next = D.units[D.units.indexOf(u) + 1];
+      render(`<div class="card stack">
+        <div><h2>עברת על כל הצעדים</h2><p class="lead">${Y.inline(u.title)}. עכשיו הכללים מעורבבים יחד: כך בודקים שהם יושבים, ולא רק שזכרת את ההסבר האחרון.</p></div>
+        <div class="row"><a class="btn" href="${back}/go">תרגול מעורב · 10 שאלות</a><a class="btn ghost" href="#/home">סיימתי להיום</a></div>
+        ${next ? `<p style="margin:0"><small>הנושא הבא: <a href="#/unit/${next.id}">${Y.inline(next.title)}</a></small></p>` : ''}
+      </div>`);
+    };
+
+    const show = (k) => {
+      if (!alive()) return;
+      if (k >= n) return done();
+      const items = G.stepItems(u, steps[k][1], 5);
+      const advance = () => { S.unit(id).step = Math.max(S.unit(id).step || 0, k + 1); S.save(); show(k + 1); };
+      render(`<a class="crumb" href="${back}">→ ${Y.inline(u.title)}</a>
+        ${dots(k)}
+        <div class="lesson step-text">${Y.fmt(textOf(k))}</div>
+        <div class="row" style="margin-top:20px"><button class="btn" id="go">${items.length ? `לתרגל את זה · ${items.length === 1 ? 'שאלה אחת' : items.length + ' שאלות'}` : k + 1 >= n ? 'סיום' : 'הבנתי, הלאה'}</button></div>`);
+      const go = () => {
+        enterHandler = null;
+        if (!items.length) return advance();
+        runSession(items, { back, unitId: id, ruleText: textOf(k), note: `צעד ${k + 1} מתוך ${n}`, then: () => { if (alive()) advance(); } });
+      };
+      $app.querySelector('#go').addEventListener('click', go);
+      enterHandler = go;
+    };
+
+    const at = S.unit(id).step || 0;
+    if (at > 0 && at < n) return show(at);
+    // from the start: ask first, explain afterwards
+    const pre = steps.map((st) => st[1].map((i) => G.fromTuple(u.ex[i], id, i)).find((x) => x && x.t === 'm')).filter(Boolean).slice(0, 3);
+    if (at >= n) { S.unit(id).step = 0; S.save(); }
+    if (!pre.length) return show(0);
+    render(`<a class="crumb" href="${back}">→ ${Y.inline(u.title)}</a>
+      <div class="card stack">
+        <div><h2>לפני ההסבר: איך היית אומרת?</h2>
+        <p class="lead">${pre.length} שאלות קצרות. עני כמו שיוצא לך, בלי לחשוב על כללים. זה לא נספר בציון ולא נשמר כטעות; זה רק מראה איפה היידיש מהבית והתקן נפרדים.</p></div>
+        <div class="row"><button class="btn" id="go">להתחיל</button><button class="btn ghost" id="skip">לדלג להסבר</button></div>
+      </div>`);
+    const start = () => {
+      enterHandler = null;
+      runSession(pre, { back, unitId: id, noRule: true, noRetry: true, noRecord: true, pre: true, note: 'לפני ההסבר', then: (log) => {
+        if (!alive()) return;
+        const same = log.filter((l) => l.ok).length;
+        render(`<div class="card stack">
+          <div><h2>${same === log.length ? 'בכולן ענית כמו בתקן' : same ? `ב־${same} מתוך ${log.length} ענית כמו בתקן` : 'כאן הבית והתקן נפרדים'}</h2>
+          <p class="lead">${same === log.length ? 'האוזן שלך כבר שם. עכשיו נראה את הכלל שמאחורי זה, כדי שתוכלי לסמוך עליו גם במילים חדשות.' : 'עכשיו ההסבר, דבר אחד בכל פעם. השאלות האלה יחזרו מייד אחרי הכלל שלהן.'}</p></div>
+          <div class="row"><button class="btn" id="go">להסבר</button></div></div>`);
+        const g = () => { enterHandler = null; show(0); };
+        $app.querySelector('#go').addEventListener('click', g);
+        enterHandler = g;
+      } });
+    };
+    $app.querySelector('#go').addEventListener('click', start);
+    $app.querySelector('#skip').addEventListener('click', () => { enterHandler = null; show(0); });
+    enterHandler = start;
   }
 
   function viewUnitGo(id) {
@@ -1084,7 +1182,7 @@
       if (on) n.setAttribute('aria-current', 'page'); else n.removeAttribute('aria-current');
     });
     if (a === 'learn') return viewLearn();
-    if (a === 'unit') return c === 'go' ? viewUnitGo(b) : viewUnit(b);
+    if (a === 'unit') return c === 'go' ? viewUnitGo(b) : c === 'steps' ? viewUnitSteps(b) : viewUnit(b);
     if (a === 'practice') return viewPractice();
     if (a === 'track') return Y.views.track(b, c);
     if (a === 'drill') return viewDrill(b);
