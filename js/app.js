@@ -477,18 +477,12 @@
     const mist = S.state.mistakes.length;
     const fresh = !S.state.diag && !hasProgress;
     const backupOld = hasProgress && S.today() - (S.state.lastExport || 0) > 30 && Object.keys(S.state.srs).length > 60;
-    const groups = D.groups.map((g) => {
-      const us = D.units.filter((u) => u.group === g.id);
-      const avg = us.reduce((a, u) => a + (S.mastery(u.id) || 0), 0) / us.length;
-      const cells = us.map((u, k) => {
-        const m = S.mastery(u.id);
-        const lvl = m === null ? (S.state.diag && S.state.diag[u.id] === 0 ? 'w' : '0') : m >= 0.85 ? '3' : m >= 0.5 ? '2' : '1';
-        const name = u.title.replace(/[{}]/g, '');
-        return `<a class="cell l${lvl}" href="#/unit/${u.id}" title="${esc(name)}${m === null ? '' : ' · ' + pct(m) + '%'}" aria-label="${esc(name)}"><span>${k + 1}</span></a>`;
-      }).join('');
-      return `<div class="prog-row"><div><div class="lbl">${esc(g.title)}</div><div class="bar"><i style="width:${pct(avg)}%"></i></div></div><div class="pct">${pct(avg)}%</div></div>
-        <div class="map">${cells}</div>`;
-    }).join('');
+    const lv = S.standing();
+    const was = S.snapBefore(7);
+    const dp = was ? lv.pts - was.pts : 0;
+    const trend = !was ? 'ההשוואה לעבר תופיע אחרי כמה ימי תרגול'
+      : Math.abs(dp) < 0.05 ? `בלי שינוי מאז לפני ${was.ago} ימים`
+      : `${dp > 0 ? 'עלייה' : 'ירידה'} של ${Math.abs(dp).toFixed(1)} נק׳ מאז לפני ${was.ago} ימים`;
 
     render(`<div class="stack">
       <div>
@@ -510,6 +504,12 @@
 
       <p class="alt-links">או ישר אל: <a href="#/unit/${nu.id}">הנושא הבא · ${Y.inline(nu.title)}</a><a href="#/track"><span class="yi">דער · די · דאָס</span> מההתחלה</a><a href="#/practice">תרגול חופשי</a></p>`}
 
+      <a class="card levelcard" href="#/progress">
+        <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><b>דרגה ${lv.level} <small>מתוך 10</small></b><small>${lv.level >= 10 ? 'הדרגה הגבוהה ביותר' : pct(lv.inLevel) + '% בדרך לדרגה ' + (lv.level + 1)}</small></div>
+        <div class="bar" style="margin-top:8px"><i style="width:${pct(lv.inLevel)}%"></i></div>
+        <small class="more">${trend} · ההתקדמות שלי ←</small>
+      </a>
+
       <div class="card">
         <div class="stats">
           <div class="stat"><b>${S.streak()}</b><span>ימים ברצף</span></div>
@@ -526,11 +526,6 @@
         <small>${Y.inline(pv.note)}</small>
       </div>
 
-      <div class="card"><h2 style="margin-bottom:12px">התקדמות</h2>${groups}
-        <p class="legend"><i class="cell l0"></i>חדש <i class="cell lw"></i>לחזק <i class="cell l1"></i>התחלתי <i class="cell l2"></i>בדרך <i class="cell l3"></i>יושב</p>
-        <p style="margin:12px 0 0"><small>כל ריבוע הוא יחידה, לפי הסדר בפרק. יחידה "יושבת" אחרי תרגול טוב בשלושה ימים שונים. ציון שלא תורגל כמה שבועות דועך.</small></p>
-        ${fresh ? '' : '<p style="margin:8px 0 0"><a href="#/diag">אבחון</a></p>'}
-      </div>
       ${backupOld && !Y.sync.enabled() ? '<p class="note tip"><b>גיבוי</b>ההתקדמות נשמרת רק בדפדפן הזה. עבר יותר מחודש מאז הגיבוי האחרון. אפשר <a href="#/settings">להפעיל סנכרון או לייצא קובץ</a>.</p>' : ''}
     </div>`);
   }
@@ -1109,6 +1104,92 @@
     render(`<a class="crumb" href="#/tools">→ כלים</a><h1>טבלאות</h1><p class="lead">כל הטבלאות במקום אחד, לעיון מהיר בזמן כתיבה.</p><div class="lesson">${Y.fmt(REF)}</div>`);
   }
 
+  /* ---------- my progress: an honest level and a comparison with the past ---------- */
+
+  function viewProgress() {
+    const lv = S.standing();
+    const groups = D.groups.map((g) => {
+      const us = D.units.filter((u) => u.group === g.id);
+      const avg = us.reduce((a, u) => a + (S.mastery(u.id) || 0), 0) / us.length;
+      const cells = us.map((u, k) => {
+        const m = S.mastery(u.id);
+        const lvl = m === null ? (S.state.diag && S.state.diag[u.id] === 0 ? 'w' : '0') : m >= 0.85 ? '3' : m >= 0.5 ? '2' : '1';
+        const name = u.title.replace(/[{}]/g, '');
+        return `<a class="cell l${lvl}" href="#/unit/${u.id}" title="${esc(name)}${m === null ? '' : ' · ' + pct(m) + '%'}" aria-label="${esc(name)}"><span>${k + 1}</span></a>`;
+      }).join('');
+      return `<div class="prog-row"><div><div class="lbl">${esc(g.title)}</div><div class="bar"><i style="width:${pct(avg)}%"></i></div></div><div class="pct">${pct(avg)}%</div></div>
+        <div class="map">${cells}</div>`;
+    }).join('');
+    const week = S.snapBefore(7);
+    const month = S.snapBefore(28);
+    const fmtD = (x, digits) => (Math.abs(x) < (digits ? 0.05 : 0.5) ? '<span class="d0">בלי שינוי</span>' : `<span class="${x > 0 ? 'dup' : 'ddn'}">${x > 0 ? '+' : '−'}${digits ? Math.abs(x).toFixed(1) : Math.abs(Math.round(x))}</span>`);
+    const cmpRow = (label, now, digits, w, m) => `<tr><th>${label}</th><td><b>${digits ? now.toFixed(1) : now}</b></td><td>${w === null ? '·' : fmtD(now - w, digits)}</td><td>${m === null ? '·' : fmtD(now - m, digits)}</td></tr>`;
+    const sameSnap = week && month && week.day === month.day;
+    const a1 = S.accWindow(0, 7);
+    const a0 = S.accWindow(7, 7);
+    const accLine = (label, cur, prev, n) => `<div class="prog-row"><div><div class="lbl">${label} <small>${n} תשובות</small></div><div class="bar"><i style="width:${cur === null ? 0 : pct(cur)}%"></i></div></div><div class="pct">${cur === null ? '·' : pct(cur) + '%'}</div></div>
+      <p class="cmpnote"><small>${cur === null ? 'אין עדיין תשובות בשבוע הזה.' : prev === null ? 'אין עדיין שבוע קודם להשוות אליו.' : `בשבעת הימים שלפני כן: ${pct(prev)}%.`}</small></p>`;
+    // the single step that would move the level most
+    const started = D.units.filter((u) => S.masteryInfo(u.id));
+    const almost = started.filter((u) => { const i = S.masteryInfo(u.id); return i.days < 3 && i.acc >= 0.8; }).sort((x, y) => S.masteryInfo(y.id).days - S.masteryInfo(x.id).days)[0];
+    const weakest = started.filter((u) => S.masteryInfo(u.id).acc < 0.8).sort((x, y) => S.masteryInfo(x.id).acc - S.masteryInfo(y.id).acc)[0];
+    const stale = started.find((u) => S.masteryInfo(u.id).stale);
+    const nu = nextUnit();
+    const tip = almost ? `יום תרגול טוב נוסף ב<a href="#/unit/${almost.id}">${Y.inline(almost.title)}</a>: הדיוק שלך שם כבר טוב, ${3 - S.masteryInfo(almost.id).days === 1 ? 'וחסר יום טוב אחד' : 'וחסרים ' + (3 - S.masteryInfo(almost.id).days) + ' ימים טובים'} (שש תשובות ביום, 80% נכונות).`
+      : stale ? `חזרה על <a href="#/unit/${stale.id}">${Y.inline(stale.title)}</a>: לא תרגלת אותה יותר משלושה שבועות, והציון שלה דועך.`
+      : weakest ? `<a href="#/unit/${weakest.id}">${Y.inline(weakest.title)}</a>: הדיוק שלך שם ${pct(S.masteryInfo(weakest.id).acc)}%, וזה מה שמעכב אותה.`
+      : `להתחיל את <a href="#/unit/${nu.id}">${Y.inline(nu.title)}</a>.`;
+    const t = S.today();
+    const cal = Array.from({ length: 28 }, (_, i) => { const d = t - 27 + i; const n = S.state.days[d] || 0; return `<i class="${n >= S.GOAL ? 'full' : n ? 'some' : ''}" title="${n} תשובות"></i>`; }).join('');
+    const active = Array.from({ length: 28 }, (_, i) => S.state.days[t - i] || 0).filter(Boolean).length;
+
+    render(`<a class="crumb" href="#/home">→ בית</a>
+      <h1>ההתקדמות שלי</h1>
+      <div class="card stack" style="margin-top:12px">
+        <div><div class="row" style="justify-content:space-between;flex-wrap:nowrap"><h2 style="margin:0">דרגה ${lv.level} <small style="font-weight:600">מתוך 10</small></h2><small>${lv.pts.toFixed(1)} מתוך ${lv.total} נקודות</small></div>
+        <div class="bar" style="margin-top:10px"><i style="width:${pct(lv.inLevel)}%"></i></div>
+        <p style="margin:8px 0 0"><small>${lv.level >= 10 ? 'הגעת לדרגה הגבוהה ביותר.' : `עוד ${lv.toNext.toFixed(1)} נקודות לדרגה ${lv.level + 1}.`}</small></p></div>
+        <p style="margin:0"><b>מה יקדם אותך הכי מהר</b><br>${tip}</p>
+        <details class="how"><summary>איך הדרגה מחושבת</summary>
+          <p><small>כל אחת מ-${lv.total} היחידות שווה עד נקודה אחת, לפי השליטה בה: הדיוק שלך ב-24 התשובות האחרונות ביחידה, ומספר הימים השונים שבהם תרגלת אותה טוב (נקודה מלאה רק אחרי שלושה ימים כאלה). כל דרגה היא עשירית מסך הנקודות.</small></p>
+          <p><small>הדרגה לא עולה מכמות תשובות, מרצף ימים או מזמן באתר, ושאלה שחוזרת אחרי טעות לא נספרת. היא גם יכולה לרדת: יחידה שלא תורגלה שלושה שבועות מאבדת חלק מהציון.</small></p>
+          <p><small>זו דרגה פנימית של הכלי הזה, לפי החומר שיש בו. היא לא מקבילה לרמות רשמיות של ידיעת שפה.</small></p>
+        </details>
+      </div>
+
+      <h3>היום לעומת קודם</h3>
+      <div class="card">
+        ${week ? `<div class="tablewrap"><table class="cmp"><tbody>
+          <tr><th></th><th>היום</th><th>מאז לפני ${week.ago} ימים</th><th>${month && !sameSnap ? `מאז לפני ${month.ago} ימים` : ''}</th></tr>
+          ${cmpRow('נקודות שליטה', lv.pts, true, week.pts, month && !sameSnap ? month.pts : null)}
+          ${cmpRow('יחידות יושבות', lv.sitting, false, week.sitting, month && !sameSnap ? month.sitting : null)}
+          ${cmpRow('מילים שנזכרו לאורך זמן', lv.known, false, week.known, month && !sameSnap ? month.known : null)}
+        </tbody></table></div>` : `<p style="margin:0"><small>עדיין אין למה להשוות. הכלי התחיל לשמור תמונת מצב יומית רק עכשיו, ולכן ההשוואה תופיע מהיום השני של התרגול ותהיה משמעותית אחרי שבוע. כרגע: ${lv.pts.toFixed(1)} נקודות, ${lv.sitting} יחידות יושבות, ${lv.known} מילים שנזכרו לאורך זמן.</small></p>`}
+        <p style="margin:10px 0 0"><small>"מילה שנזכרה לאורך זמן" היא מילה או מין של שם עצם שענית עליהם נכון כמה פעמים במרווחים של ימים.</small></p>
+      </div>
+
+      <h3>דיוק בניסיון ראשון · שבעת הימים האחרונים</h3>
+      <div class="card">
+        ${accLine('כל התרגילים', a1.acc, a0.acc, a1.n)}
+        <div style="height:12px"></div>
+        ${accLine('הקלדה ובניית משפט', a1.pacc, a0.pacc, a1.pn)}
+        <p style="margin:10px 0 0"><small>השורה השנייה היא המדד הקרוב ביותר לכתיבה אמיתית. שימי לב שהדיוק יכול לרדת דווקא כשמתקדמים, כי החומר החדש קשה יותר; לכן הדרגה נשענת על שליטה ביחידות ולא על המספר הזה.</small></p>
+      </div>
+
+      <h3>ימי תרגול · ארבעת השבועות האחרונים</h3>
+      <div class="card">
+        <div class="cal">${cal}</div>
+        <p style="margin:10px 0 0"><small>${active} מתוך 28 ימים. מלא = הגעת ליעד היומי (${S.GOAL} תשובות), בהיר = תרגלת פחות מזה.</small></p>
+      </div>
+
+      <h3>לפי פרקים</h3>
+      <div class="card">${groups}
+        <p class="legend"><i class="cell l0"></i>חדש <i class="cell lw"></i>לחזק <i class="cell l1"></i>התחלתי <i class="cell l2"></i>בדרך <i class="cell l3"></i>יושב</p>
+        <p style="margin:12px 0 0"><small>כל ריבוע הוא יחידה, לפי הסדר בפרק. יחידה "יושבת" אחרי תרגול טוב בשלושה ימים שונים.</small></p>
+        <p style="margin:8px 0 0"><a href="#/diag">אבחון</a></p>
+      </div>`);
+  }
+
   /* ---------- questions for the teacher ---------- */
 
   function viewFlags() {
@@ -1249,7 +1330,7 @@
     const parts = (location.hash || '#/home').replace(/^#\//, '').split('/');
     const [a, b, c] = parts;
     document.querySelectorAll('#nav a').forEach((n) => {
-      const on = n.dataset.r === a || (n.dataset.r === 'learn' && ['unit', 'diag', 'read'].includes(a)) ||
+      const on = n.dataset.r === a || (n.dataset.r === 'home' && a === 'progress') || (n.dataset.r === 'learn' && ['unit', 'diag', 'read'].includes(a)) ||
         (n.dataset.r === 'practice' && ['drill', 'daily', 'mistakes', 'blitz', 'personal'].includes(a)) ||
         (n.dataset.r === 'tools' && ['check', 'dict', 'lab', 'ai', 'ref', 'flags', 'review'].includes(a)) ||
         (n.dataset.r === 'words' && ['deck', 'mywords'].includes(a));
@@ -1273,6 +1354,7 @@
     if (a === 'ai') return viewAi(b === 'chat' ? 'chat' : 'check');
     if (a === 'ref') return viewRef();
     if (a === 'flags') return viewFlags();
+    if (a === 'progress') return viewProgress();
     if (a === 'tools') return Y.views.tools();
     if (a === 'check') return Y.views.check();
     if (a === 'dict') return Y.views.dict();
