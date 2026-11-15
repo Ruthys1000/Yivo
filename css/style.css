@@ -466,3 +466,5 @@ details.fold .grid { margin-top: 8px; }
 .step-dots i.on { background: var(--accent); }
 .step-text { font-size: 1.04rem; }
 details.fold .lesson { margin-top: 4px; }
+.keys[hidden] { display: none; }
+.fb .keys { margin: 8px 0 0; }
