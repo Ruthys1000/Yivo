@@ -128,7 +128,7 @@
     let tag = '';
     if (e.kind === 'noun') {
       head = Y.ART.nom[e.g] + ' ' + e.head;
-      tag = 'שם עצם · ' + GNAME[e.g];
+      tag = 'שם עצם · ' + GNAME[e.g] + (e.alt ? ' (מקובל גם ' + Y.ART.nom[e.alt] + ')' : '');
       if (e.pl) rows.push(['רבים', `<span class="yi">די ${esc(e.pl)}</span>`]);
       if (e.dim) rows.push(['הקטנה', `<span class="yi">דאָס ${esc(e.dim)}</span>`]);
       if (e.irr) rows.push(['נטייה', 'שם שנוטה בעצמו, ראי <a href="#/unit/c6">שייכות ושמות נוטים</a>']);
@@ -426,7 +426,7 @@
       btns.forEach((b) => b.addEventListener('click', () => {
         if (lock || left <= 0) return;
         lock = true;
-        const ok = Y.canon(b.dataset.a) === Y.canon(cur.a);
+        const ok = [cur.a].concat(cur.also || []).some((a) => Y.canon(b.dataset.a) === Y.canon(a));
         total++;
         cur.unit = 'b1';
         S.answer(cur, ok);

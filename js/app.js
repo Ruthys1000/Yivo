@@ -219,16 +219,18 @@
       const btns = [...$app.querySelectorAll('.opt')];
       btns.forEach((b, k) => b.addEventListener('click', () => {
         const chosen = opts[k];
-        const ok = Y.canon(chosen) === Y.canon(it.a);
+        const right = (x) => Y.canon(x) === Y.canon(it.a) || (it.also || []).some((a) => Y.canon(a) === Y.canon(x));
+        const ok = right(chosen);
         btns.forEach((x, j) => {
           x.disabled = true;
-          if (Y.canon(opts[j]) === Y.canon(it.a)) x.classList.add('right');
+          if (right(opts[j])) x.classList.add('right');
           else if (j === k) x.classList.add('wrong');
           else x.classList.add('dim');
         });
         const qt = $app.querySelector('.q-text');
-        if (qt && !it.plainQ) qt.outerHTML = Y.disp(qHtml(it, it.a, true));
-        feedback(it, ok, it.a, '', chosen);
+        const shown = ok ? chosen : it.a;
+        if (qt && !it.plainQ) qt.outerHTML = Y.disp(qHtml(it, shown, true));
+        feedback(it, ok, it.also ? [it.a].concat(it.also).join(' / ') : it.a, '', chosen);
       }));
     };
 

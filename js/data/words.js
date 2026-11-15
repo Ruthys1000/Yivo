@@ -291,6 +291,13 @@
       D.nouns.push({ w, he, g, c: cls[0], irr: cls.includes('!') });
     }
   }
+  /* Nouns with a second gender that is also accepted in the standard. Both answers count as right,
+     and these nouns stay out of the case drills, where a "wrong gender" option would not be wrong. */
+  const ALT = { 'טעלער': 'n', 'ספֿר': 'n', 'חדר': 'n', 'חודש': 'n', 'מאַרק': 'n', 'בלאַט': 'm', 'שטול': 'm' };
+  for (const n of D.nouns) {
+    const k = Object.keys(ALT).find((x) => Y.canon(x) === Y.canon(n.w));
+    if (k && ALT[k] !== n.g) n.alt = ALT[k];
+  }
 
   /* Adjectives for case drills: "stem|hebrew|classes it fits" */
   D.adjs = `גוט|טוב|poa

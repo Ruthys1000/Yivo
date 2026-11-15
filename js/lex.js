@@ -38,7 +38,7 @@
   for (const n of D.nouns) {
     const pl = D.plurals.find((p) => p.sg === n.w && (n.he.includes(p.he) || p.he.includes(n.he)));
     const dim = D.dims.find((d) => d.base === n.w);
-    const idx = addEntry({ kind: 'noun', head: n.w, he: n.he, g: n.g, irr: n.irr, pl: pl ? pl.pl : null, dim: dim ? dim.dim : null });
+    const idx = addEntry({ kind: 'noun', head: n.w, he: n.he, g: n.g, alt: n.alt, irr: n.irr, pl: pl ? pl.pl : null, dim: dim ? dim.dim : null });
     if (pl) addForm(pl.pl, idx);
     if (dim) addForm(dim.dim, idx);
   }
