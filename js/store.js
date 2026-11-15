@@ -4,7 +4,7 @@
   const KEY = 'yivo.v1';
   const INTERVALS = [0, 1, 3, 7, 16, 35, 90];
 
-  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, personal: [], lastExport: 0, read: {}, flags: [], settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
+  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, personal: [], lastExport: 0, read: {}, flags: [], track: {}, settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
 
   let S = blank();
   try {
@@ -150,6 +150,14 @@
       return true;
     },
     removeFlag(i) { S.flags.splice(i, 1); save(); },
+    /* Gender track: best score, number of rounds and last day for one step of one word set. */
+    track: (key) => (S.track && S.track[key]) || null,
+    setTrack(key, ratio) {
+      if (!S.track) S.track = {};
+      const a = S.track[key] || { b: 0, n: 0, d: 0 };
+      S.track[key] = { b: Math.max(a.b, ratio), n: a.n + 1, d: today() };
+      save();
+    },
     markRead(id) { if (!S.read) S.read = {}; S.read[id] = 1; save(); },
     removePersonal(key) { S.personal = (S.personal || []).filter((p) => p.key !== key); save(); },
     best: (k) => (S.best && S.best[k]) || 0,
@@ -205,6 +213,12 @@
       S.read = Object.assign({}, r.read, S.read);
       for (const k in r.best || {}) S.best[k] = Math.max(S.best[k] || 0, r.best[k]);
       S.lastExport = Math.max(S.lastExport || 0, r.lastExport || 0);
+      if (!S.track) S.track = {};
+      for (const k in r.track || {}) {
+        const a = S.track[k];
+        const b = r.track[k];
+        S.track[k] = a ? { b: Math.max(a.b, b.b), n: Math.max(a.n, b.n), d: Math.max(a.d, b.d) } : b;
+      }
       const changed = JSON.stringify(store.syncable()) !== before;
       if (changed) { const t = Math.max(S.updatedAt || 0, r.updatedAt || 0); save(); S.updatedAt = t; }
       return changed;

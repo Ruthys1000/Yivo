@@ -423,3 +423,22 @@ ol.dense li { margin-bottom: 4px; }
 .whycard p { margin: 0 0 10px; font-size: .95rem; }
 .whycard #thread { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
 .whycard .msg { max-width: 100%; }
+
+/* ---------- gender colours and the gender track ---------- */
+:root { --g-m: #2a66a8; --g-f: #8a3791; --g-n: #96690f; }
+@media (prefers-color-scheme: dark) { :root { --g-m: #8fbdf0; --g-f: #dba5e6; --g-n: #e0b860; } }
+.g-m { color: var(--g-m); }
+.g-f { color: var(--g-f); }
+.g-n { color: var(--g-n); }
+.opt.g-m:not(.right):not(.wrong) { border-color: color-mix(in srgb, var(--g-m) 55%, var(--line)); }
+.opt.g-f:not(.right):not(.wrong) { border-color: color-mix(in srgb, var(--g-f) 55%, var(--line)); }
+.opt.g-n:not(.right):not(.wrong) { border-color: color-mix(in srgb, var(--g-n) 55%, var(--line)); }
+.opt.g-m.right, .opt.g-f.right, .opt.g-n.right { color: var(--ok); }
+.opt.g-m.wrong, .opt.g-f.wrong, .opt.g-n.wrong { color: var(--bad); }
+.gwords { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); margin: 16px 0; }
+.gw { background: var(--card); border: 1px solid var(--line); border-inline-start: 4px solid currentColor; border-radius: 12px; padding: 10px 14px; }
+.gw b { display: block; font-size: 1.3rem; }
+.gw small { display: block; color: var(--muted); line-height: 1.5; }
+.steps { display: grid; gap: 10px; }
+.steps .tile b { font-size: 1.1rem; margin: 2px 0; }
+.steps .tile.next, .grid .tile.next { border-color: var(--accent); border-width: 1.5px; }
