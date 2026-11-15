@@ -69,6 +69,29 @@
     return items;
   };
 
+  /* The closing screen of a round: score, what to do next, and the missed items. */
+  function showResult(log, o) {
+    const right = log.filter((l) => l.ok).length;
+    const wrong = log.filter((l) => !l.ok);
+    if (o.onDone) o.onDone(log);
+    const showAns = (it) => (it.t === 'h' ? it.fix : it.t === 'o' ? (it.lead ? it.lead + ' ' : '') + it.a[0] : it.t === 't' ? it.a[0] : (it.q && it.q !== '___' && !it.plainQ ? it.q.replace('___', it.a) : it.a));
+    render(`
+      <div class="card stack">
+        ${o.daily ? `<div><h2>סיימת את הסשן של היום</h2><small>${S.streak()} ימים ברצף · ${S.todayCount()} תשובות היום${o.wrote ? ' · כתבת ' + o.wrote + ' מילים משלך' : ''}</small></div>` : ''}
+        <div><div class="result-num">${right}/${log.length}</div>
+        <p class="lead">${right === log.length ? 'הכול נכון. יישר כּוח!' : right / log.length >= 0.7 ? 'יפה. הטעויות נשמרו לחזרה.' : 'זה בדיוק החומר שכדאי לחזור עליו. הטעויות נשמרו.'}</p></div>
+        ${o.summary ? o.summary(log) : ''}
+        <div class="row">
+          ${o.daily ? `<a class="btn" href="${o.back}">סיימתי להיום</a>` : ''}
+          ${o.again ? `<a class="btn${o.daily ? ' ghost' : ''}" href="${o.again}" id="again">${o.daily ? 'עוד סשן' : 'סבב נוסף'}</a>` : ''}
+          ${o.daily ? '' : `<a class="btn ghost" href="${o.back}">חזרה</a>`}
+        </div>
+      </div>
+      ${wrong.length ? `<h3>לחזרה</h3><ul class="miss">${wrong.map((l) => `<li><span class="yi">${esc(showAns(l.it))}</span>${l.it.ex ? `<br><small>${Y.inline(l.it.ex)}</small>` : ''}</li>`).join('')}</ul>` : ''}`);
+    const again = $app.querySelector('#again');
+    if (again) again.addEventListener('click', (e) => { e.preventDefault(); route(true); });
+  }
+
   /* ================= exercise runner ================= */
 
   const KEYS = ['אַ', 'אָ', 'פּ', 'פֿ', 'ײַ', 'יִ', 'וּ', 'בֿ', 'כּ', 'שׂ', 'תּ', '־', '׳'].map((k) => Y.disp(k.normalize('NFD')));
@@ -90,7 +113,7 @@
         <a class="x" href="${o.back}" aria-label="סגירה">×</a>
         <div class="bar"><i style="width:${(i / items.length) * 100}%"></i></div>
         <span class="cnt">${Math.min(i + 1, items.length)}/${items.length}</span>
-      </div>`;
+      </div>${o.note ? `<div class="run-note">${o.note}</div>` : ''}${items[i] && items[i].retry ? '<div class="again-tag">שוב · טעית בה קודם, עכשיו מהזיכרון</div>' : ''}`;
 
     /* "Show the rule": the unit's explanation, available while answering. */
     let ruleOpen = false;
@@ -100,7 +123,7 @@
       const d = document.createElement('details');
       d.className = 'rule';
       d.open = ruleOpen;
-      d.innerHTML = Y.disp(`<summary>הצג את הכלל · ${Y.inline(u.title)}</summary><div class="lesson">${Y.fmt(u.text)}</div>`);
+      d.innerHTML = Y.disp(`<summary>הצג את הכלל · ${Y.inline(u.title)}</summary><div class="lesson">${Y.fmt(o.ruleText || u.text)}</div>`);
       d.addEventListener('toggle', () => { ruleOpen = d.open; });
       $app.appendChild(d);
     };
@@ -116,19 +139,43 @@
       : (it.he ? it.he + ' · ' : '') + (it.q || ''));
 
     const feedback = (it, ok, shown, extra, given) => {
-      S.answer(it, ok);
-      log.push({ it, ok });
+      // a repeated question is practice only: progress and the score keep the first attempt
+      if (!it.retry && !o.noRecord) {
+        S.answer(it, ok);
+        log.push({ it, ok });
+        // a missed question comes back once, a few questions later, to be answered from memory
+        if (!ok && !o.noRetry) items.splice(Math.min(i + 4, items.length), 0, Object.assign({}, it, { retry: true }));
+      }
+      // after a typed mistake the standard form is typed out before moving on
+      const retype = !ok && it.t === 't' && !o.noRetry;
       const u = it.unit && !o.unitId ? unitById(it.unit) : null;
       const ctx = { q: describe(it), given: given || '', correct: shown, ex: (it.ex || '').replace(/[{}]/g, ''), unit: u ? u.title.replace(/[{}]/g, '') : '' };
       const box = document.createElement('div');
       box.className = 'fb ' + (ok ? 'ok' : 'no');
+      // before the explanation: no verdict and no reasons yet, only what the standard has
+      if (o.pre) {
+        log.push({ it, ok });
+        box.className = 'fb pre';
+        box.innerHTML = Y.disp(`<h4>${ok ? 'כך גם בתקן' : 'בתקן'}</h4><p class="ans">${esc(shown)}</p>
+          <p><small>${ok ? 'מייד נראה למה.' : 'זו לא טעות שלך: כך מדברים בבית. מייד נראה מה הכלל בתקן.'}</small></p>
+          <div class="row"><button class="btn" id="next">${i + 1 >= items.length ? 'להסבר' : 'הבא'}</button></div>`);
+        $app.appendChild(box);
+        const goPre = () => { enterHandler = null; i++; step(); };
+        box.querySelector('#next').addEventListener('click', goPre);
+        setTimeout(() => { enterHandler = goPre; }, 150);
+        box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        return;
+      }
       box.innerHTML = Y.disp(`
         <h4>${ok ? 'נכון' : 'התשובה לפי התקן'}</h4>
         ${extra ? `<p>${extra}</p>` : ''}
         ${ok && !extra ? '' : `<p class="ans">${esc(shown)}</p>`}
         ${it.ex ? `<p>${Y.inline(it.ex)}</p>` : ''}
+        ${retype ? `<label class="field retype"><span>הקלידי את הצורה התקנית כדי להמשיך</span>
+          <input class="type-in" id="re" type="text" lang="yi" dir="rtl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>` : ''}
         <div class="row">
-          <button class="btn" id="next">${i + 1 >= items.length ? 'סיום' : 'הבא'}</button>
+          <button class="btn" id="next"${retype ? ' disabled' : ''}>${i + 1 >= items.length ? (o.then ? 'הלאה' : 'סיום') : 'הבא'}</button>
+          ${retype ? '<button class="linkbtn" id="skipre">להמשיך בלי להקליד</button>' : ''}
           ${!ok && u ? `<a class="btn ghost small" href="#/unit/${u.id}">ליחידה: ${Y.inline(u.title)}</a>` : ''}
         </div>
         <div class="row helprow">
@@ -138,13 +185,26 @@
         <div id="whybox"></div>`);
       $app.appendChild(box);
       const go = () => { enterHandler = null; i++; step(); };
-      box.querySelector('#next').addEventListener('click', go);
-      setTimeout(() => { enterHandler = go; }, 150);
+      const nextBtn = box.querySelector('#next');
+      nextBtn.addEventListener('click', go);
+      if (retype) {
+        const re = box.querySelector('#re');
+        const skip = box.querySelector('#skipre');
+        const match = () => [shown].concat(Array.isArray(it.a) ? it.a : []).some((a) => Y.bare(a) === Y.bare(re.value.trim()));
+        re.addEventListener('input', () => {
+          const m = match();
+          nextBtn.disabled = !m;
+          re.style.borderColor = m ? 'var(--ok)' : '';
+          if (m) skip.hidden = true;
+        });
+        skip.addEventListener('click', () => { nextBtn.disabled = false; skip.hidden = true; nextBtn.focus(); });
+        setTimeout(() => { enterHandler = () => { if (!nextBtn.disabled) go(); }; re.focus({ preventScroll: true }); }, 150);
+      } else setTimeout(() => { enterHandler = go; }, 150);
       box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 
       box.querySelector('#flag').addEventListener('click', (e) => {
         S.addFlag({ q: ctx.q, given: ctx.given, correct: ctx.correct, ex: ctx.ex, unit: ctx.unit, day: S.today() });
-        e.target.textContent = 'נשמר ב"שאלות למורה" (בהגדרות)';
+        e.target.textContent = 'נשמר ב"שאלות למורה" (בכלים)';
         e.target.disabled = true;
       });
 
@@ -224,7 +284,7 @@
         btns.forEach((x, j) => {
           x.disabled = true;
           if (right(opts[j])) x.classList.add('right');
-          else if (j === k) x.classList.add('wrong');
+          else if (j === k) x.classList.add(o.pre ? 'dim' : 'wrong');
           else x.classList.add('dim');
         });
         const qt = $app.querySelector('.q-text');
@@ -365,25 +425,8 @@
 
     const finish = () => {
       enterHandler = null;
-      const right = log.filter((l) => l.ok).length;
-      const wrong = log.filter((l) => !l.ok);
-      if (o.onDone) o.onDone(log);
-      const showAns = (it) => (it.t === 'h' ? it.fix : it.t === 'o' ? (it.lead ? it.lead + ' ' : '') + it.a[0] : it.t === 't' ? it.a[0] : (it.q && it.q !== '___' && !it.plainQ ? it.q.replace('___', it.a) : it.a));
-      render(`
-        <div class="card stack">
-          ${o.daily ? `<div><h2>סיימת את הסשן של היום</h2><small>${S.streak()} ימים ברצף · ${S.todayCount()} תשובות היום</small></div>` : ''}
-          <div><div class="result-num">${right}/${log.length}</div>
-          <p class="lead">${right === log.length ? 'הכול נכון. יישר כּוח!' : right / log.length >= 0.7 ? 'יפה. הטעויות נשמרו לחזרה.' : 'זה בדיוק החומר שכדאי לחזור עליו. הטעויות נשמרו.'}</p></div>
-          ${o.summary ? o.summary(log) : ''}
-          <div class="row">
-            ${o.daily ? `<a class="btn" href="${o.back}">סיימתי להיום</a>` : ''}
-            ${o.again ? `<a class="btn${o.daily ? ' ghost' : ''}" href="${o.again}" id="again">${o.daily ? 'עוד סשן' : 'סבב נוסף'}</a>` : ''}
-            ${o.daily ? '' : `<a class="btn ghost" href="${o.back}">חזרה</a>`}
-          </div>
-        </div>
-        ${wrong.length ? `<h3>לחזרה</h3><ul class="miss">${wrong.map((l) => `<li><span class="yi">${esc(showAns(l.it))}</span>${l.it.ex ? `<br><small>${Y.inline(l.it.ex)}</small>` : ''}</li>`).join('')}</ul>` : ''}`);
-      const again = $app.querySelector('#again');
-      if (again) again.addEventListener('click', (e) => { e.preventDefault(); route(true); });
+      if (o.then) return o.then(log);
+      showResult(log, o);
     };
 
     const step = () => {
@@ -430,7 +473,14 @@
     const groups = D.groups.map((g) => {
       const us = D.units.filter((u) => u.group === g.id);
       const avg = us.reduce((a, u) => a + (S.mastery(u.id) || 0), 0) / us.length;
-      return `<div class="prog-row"><div><div class="lbl">${esc(g.title)}</div><div class="bar"><i style="width:${pct(avg)}%"></i></div></div><div class="pct">${pct(avg)}%</div></div>`;
+      const cells = us.map((u, k) => {
+        const m = S.mastery(u.id);
+        const lvl = m === null ? (S.state.diag && S.state.diag[u.id] === 0 ? 'w' : '0') : m >= 0.85 ? '3' : m >= 0.5 ? '2' : '1';
+        const name = u.title.replace(/[{}]/g, '');
+        return `<a class="cell l${lvl}" href="#/unit/${u.id}" title="${esc(name)}${m === null ? '' : ' · ' + pct(m) + '%'}" aria-label="${esc(name)}"><span>${k + 1}</span></a>`;
+      }).join('');
+      return `<div class="prog-row"><div><div class="lbl">${esc(g.title)}</div><div class="bar"><i style="width:${pct(avg)}%"></i></div></div><div class="pct">${pct(avg)}%</div></div>
+        <div class="map">${cells}</div>`;
     }).join('');
 
     render(`<div class="stack">
@@ -447,12 +497,11 @@
       </div>` : `
       <div class="card hero stack">
         <div><small>${done ? 'היעד היומי הושג' : 'כרבע שעה'}</small><h2>${done ? 'רוצה עוד סשן?' : 'הסשן של היום'}</h2>
-        <p class="lead">${[due ? due + ' חזרות' : '', mist ? Math.min(mist, 3) + ' טעויות לתיקון' : '', 'תרגול של ' + nu.title.replace(/[{}]/g, '')].filter(Boolean).join(' · ')}</p></div>
+        <p class="lead">${[due ? due + ' חזרות' : '', mist ? Math.min(mist, 3) + ' טעויות לתיקון' : '', 'תרגול של ' + nu.title.replace(/[{}]/g, ''), 'משפט משלך'].filter(Boolean).join(' · ')}</p></div>
         <div class="row"><a class="btn" href="#/daily">${done ? 'עוד סשן' : 'להתחיל'}</a></div>
       </div>
 
-      <a class="tile next" href="#/unit/${nu.id}"><small>הנושא הבא במסלול</small><b>${Y.inline(nu.title)}</b><small>${Y.inline(nu.sub)}</small></a>
-      <a class="tile next" href="#/track"><small>מסלול נפרד, צעד אחד בכל פעם</small><b><span class="yi">דער · די · דאָס</span> מההתחלה</b><small>שש מילים בכל פעם: מין, תואר, <span class="yi">דעם</span>, <span class="yi">מײַן</span></small></a>`}
+      <p class="alt-links">או ישר אל: <a href="#/unit/${nu.id}">הנושא הבא · ${Y.inline(nu.title)}</a><a href="#/track"><span class="yi">דער · די · דאָס</span> מההתחלה</a><a href="#/practice">תרגול חופשי</a></p>`}
 
       <div class="card">
         <div class="stats">
@@ -471,13 +520,8 @@
       </div>
 
       <div class="card"><h2 style="margin-bottom:12px">התקדמות</h2>${groups}
-        <div class="map" aria-label="מפת היחידות">${D.units.map((u) => {
-          const m = S.mastery(u.id);
-          const lvl = m === null ? (S.state.diag && S.state.diag[u.id] === 0 ? 'w' : '0') : m >= 0.85 ? '3' : m >= 0.5 ? '2' : '1';
-          return `<a class="cell l${lvl}" href="#/unit/${u.id}" title="${esc(u.title)}${m === null ? '' : ' · ' + pct(m) + '%'}"><span>${u.id.toUpperCase()}</span></a>`;
-        }).join('')}</div>
         <p class="legend"><i class="cell l0"></i>חדש <i class="cell lw"></i>לחזק <i class="cell l1"></i>התחלתי <i class="cell l2"></i>בדרך <i class="cell l3"></i>יושב</p>
-        <p style="margin:12px 0 0"><small>יחידה "יושבת" אחרי תרגול טוב בשלושה ימים שונים. ציון שלא תורגל כמה שבועות דועך.</small></p>
+        <p style="margin:12px 0 0"><small>כל ריבוע הוא יחידה, לפי הסדר בפרק. יחידה "יושבת" אחרי תרגול טוב בשלושה ימים שונים. ציון שלא תורגל כמה שבועות דועך.</small></p>
         ${fresh ? '' : '<p style="margin:8px 0 0"><a href="#/diag">אבחון</a></p>'}
       </div>
       ${backupOld && !Y.sync.enabled() ? '<p class="note tip"><b>גיבוי</b>ההתקדמות נשמרת רק בדפדפן הזה. עבר יותר מחודש מאז הגיבוי האחרון. אפשר <a href="#/settings">להפעיל סנכרון או לייצא קובץ</a>.</p>' : ''}
@@ -517,10 +561,22 @@
       <div class="row" style="justify-content:space-between"><h1>${Y.inline(u.title)}</h1>${badge(u.id)}</div>
       <p class="lead">${Y.inline(u.sub)}</p>
       ${(() => { const mi = S.masteryInfo(u.id); return mi ? `<p><small>דיוק ${pct(mi.acc)}% · ימי תרגול טובים: ${mi.days} מתוך 3${mi.stale ? ' · לא תורגל זמן רב, כדאי לחזור' : ''}</small></p>` : ''; })()}
-      <div class="row" style="margin:16px 0"><a class="btn" href="#/unit/${u.id}/go">תרגול</a></div>
-      <div class="lesson">${Y.fmt(u.text)}</div>
+      ${(() => {
+        const n = (D.steps[u.id] || []).length;
+        const at = (S.state.units[u.id] || {}).step || 0;
+        const started = !!S.masteryInfo(u.id);
+        if (!n) return `<div class="row" style="margin:16px 0"><a class="btn" href="#/unit/${u.id}/go">תרגול</a></div><div class="lesson">${Y.fmt(u.text)}</div>`;
+        return `<div class="card stack" style="margin:16px 0">
+          <div><b>${at >= n ? 'עברת על כל הצעדים' : at ? `צעד ${at + 1} מתוך ${n}` : `${n} צעדים קצרים`}</b><br>
+          <small>${at >= n ? 'עכשיו תרגול מעורב, עד שהיחידה יושבת. אפשר גם לעבור שוב על הצעדים.' : 'קודם כמה שאלות בלי הסבר, ואז דבר אחד בכל פעם: כלל קצר ומייד תרגול שלו.'}</small></div>
+          <div class="row">${at >= n
+            ? `<a class="btn" href="#/unit/${u.id}/go">תרגול מעורב · 10 שאלות</a><a class="btn ghost" href="#/unit/${u.id}/steps">שוב בצעדים</a>`
+            : `<a class="btn" href="#/unit/${u.id}/steps">${at ? 'להמשיך בצעדים' : 'ללמוד בצעדים'}</a><a class="btn ghost" href="#/unit/${u.id}/go">ישר לתרגול</a>`}</div>
+        </div>
+        <details class="fold"${at >= n || started ? ' open' : ''}><summary>כל ההסבר בדף אחד</summary><div class="lesson">${Y.fmt(u.text)}</div></details>`;
+      })()}
       <div class="row" style="margin-top:24px">
-        <a class="btn" href="#/unit/${u.id}/go">תרגול · 10 שאלות</a>
+        ${D.steps[u.id] ? '' : `<a class="btn" href="#/unit/${u.id}/go">תרגול · 10 שאלות</a>`}
         ${Y.ai.enabled() ? `<button class="btn ghost" id="aiex">תרגילים חדשים מהמורה</button>` : ''}
       </div>
       <div id="aimsg"></div>
@@ -545,6 +601,77 @@
     });
   }
 
+  /* A unit in small steps: a few questions before any explanation, then one piece of the rule at a time, each followed by its own practice. */
+  function viewUnitSteps(id) {
+    const u = unitById(id);
+    const steps = u && D.steps[id];
+    if (!steps) return viewUnit(id);
+    const blocks = u.text.split(/\n\s*\n/);
+    const back = '#/unit/' + id;
+    const here = '#/unit/' + id + '/steps';
+    const alive = () => location.hash === here;
+    const n = steps.length;
+    const textOf = (k) => steps[k][0].map((b) => blocks[b]).join('\n\n');
+    const dots = (k) => `<div class="step-dots" aria-label="צעד ${k + 1} מתוך ${n}">${steps.map((_, j) => `<i class="${j < k ? 'done' : j === k ? 'on' : ''}"></i>`).join('')}</div>`;
+
+    const done = () => {
+      const next = D.units[D.units.indexOf(u) + 1];
+      render(`<div class="card stack">
+        <div><h2>עברת על כל הצעדים</h2><p class="lead">${Y.inline(u.title)}. עכשיו הכללים מעורבבים יחד: כך בודקים שהם יושבים, ולא רק שזכרת את ההסבר האחרון.</p></div>
+        <div class="row"><a class="btn" href="${back}/go">תרגול מעורב · 10 שאלות</a><a class="btn ghost" href="#/home">סיימתי להיום</a></div>
+        ${next ? `<p style="margin:0"><small>הנושא הבא: <a href="#/unit/${next.id}">${Y.inline(next.title)}</a></small></p>` : ''}
+      </div>`);
+    };
+
+    const show = (k) => {
+      if (!alive()) return;
+      if (k >= n) return done();
+      const items = G.stepItems(u, steps[k][1], 5);
+      const advance = () => { S.unit(id).step = Math.max(S.unit(id).step || 0, k + 1); S.save(); show(k + 1); };
+      render(`<a class="crumb" href="${back}">→ ${Y.inline(u.title)}</a>
+        ${dots(k)}
+        <div class="lesson step-text">${Y.fmt(textOf(k))}</div>
+        <div class="row" style="margin-top:20px"><button class="btn" id="go">${items.length ? `לתרגל את זה · ${items.length === 1 ? 'שאלה אחת' : items.length + ' שאלות'}` : k + 1 >= n ? 'סיום' : 'הבנתי, הלאה'}</button></div>`);
+      const go = () => {
+        enterHandler = null;
+        if (!items.length) return advance();
+        runSession(items, { back, unitId: id, ruleText: textOf(k), note: `צעד ${k + 1} מתוך ${n}`, then: () => { if (alive()) advance(); } });
+      };
+      $app.querySelector('#go').addEventListener('click', go);
+      enterHandler = go;
+    };
+
+    const at = S.unit(id).step || 0;
+    if (at > 0 && at < n) return show(at);
+    // from the start: ask first, explain afterwards
+    const pre = steps.map((st) => st[1].map((i) => G.fromTuple(u.ex[i], id, i)).find((x) => x && x.t === 'm')).filter(Boolean).slice(0, 3);
+    if (at >= n) { S.unit(id).step = 0; S.save(); }
+    if (!pre.length) return show(0);
+    render(`<a class="crumb" href="${back}">→ ${Y.inline(u.title)}</a>
+      <div class="card stack">
+        <div><h2>לפני ההסבר: איך היית אומרת?</h2>
+        <p class="lead">${pre.length} שאלות קצרות. עני כמו שיוצא לך, בלי לחשוב על כללים. זה לא נספר בציון ולא נשמר כטעות; זה רק מראה איפה היידיש מהבית והתקן נפרדים.</p></div>
+        <div class="row"><button class="btn" id="go">להתחיל</button><button class="btn ghost" id="skip">לדלג להסבר</button></div>
+      </div>`);
+    const start = () => {
+      enterHandler = null;
+      runSession(pre, { back, unitId: id, noRule: true, noRetry: true, noRecord: true, pre: true, note: 'לפני ההסבר', then: (log) => {
+        if (!alive()) return;
+        const same = log.filter((l) => l.ok).length;
+        render(`<div class="card stack">
+          <div><h2>${same === log.length ? 'בכולן ענית כמו בתקן' : same ? `ב־${same} מתוך ${log.length} ענית כמו בתקן` : 'כאן הבית והתקן נפרדים'}</h2>
+          <p class="lead">${same === log.length ? 'האוזן שלך כבר שם. עכשיו נראה את הכלל שמאחורי זה, כדי שתוכלי לסמוך עליו גם במילים חדשות.' : 'עכשיו ההסבר, דבר אחד בכל פעם. השאלות האלה יחזרו מייד אחרי הכלל שלהן.'}</p></div>
+          <div class="row"><button class="btn" id="go">להסבר</button></div></div>`);
+        const g = () => { enterHandler = null; show(0); };
+        $app.querySelector('#go').addEventListener('click', g);
+        enterHandler = g;
+      } });
+    };
+    $app.querySelector('#go').addEventListener('click', start);
+    $app.querySelector('#skip').addEventListener('click', () => { enterHandler = null; show(0); });
+    enterHandler = start;
+  }
+
   function viewUnitGo(id) {
     const u = unitById(id);
     if (!u) return viewLearn();
@@ -553,23 +680,26 @@
 
   function viewPractice() {
     const mist = S.state.mistakes.length;
+    const tile = (d) => `<a class="tile" href="#/drill/${d.id}"><b>${Y.inline(d.title)}</b><small>${Y.inline(d.sub)}</small></a>`;
     render(`<h1>תרגול</h1>
-      <p class="lead">תרגילים שנוצרים מחדש בכל פעם, כך שאפשר לחזור עליהם כמה שרוצים.</p>
-      <div class="grid" style="margin-top:16px">
+      <div class="card hero stack" style="margin-top:12px">
+        <div><h2>הסשן של היום</h2><p class="lead">חזרות, טעויות והנושא הבא, בסדר שמתאים לך. אם לא בטוחה מה לתרגל, זה המקום.</p></div>
+        <div class="row"><a class="btn" href="#/daily">להתחיל</a></div>
+      </div>
+      <div class="grid" style="margin-top:12px">
         <a class="tile" href="#/track"><b><span class="yi">דער · די · דאָס</span> מההתחלה</b><small>מסלול בצעדים קטנים: שש מילים בכל פעם</small></a>
-        <a class="tile" href="#/daily"><b>הסשן של היום</b><small>חזרות, טעויות והנושא הבא, בסדר שמתאים לך</small></a>
         <a class="tile" href="#/mistakes"><span class="num">${mist || ''}</span><b>הטעויות שלי</b><small>חזרה על שאלות שטעית בהן</small></a>
         <a class="tile" href="#/personal"><span class="num">${(S.state.personal || []).length || ''}</span><b>התרגילים שלי</b><small>${(S.state.personal || []).length ? 'נבנו מתיקונים בטקסטים שכתבת' : 'ייבנו מתיקונים בבודק הכתיב ואצל המורה'}</small></a>
       </div>
-      <h3>משחקים</h3>
+      <details class="fold"><summary>משחקים <small>${GAMES.length + 1}</small></summary>
       <div class="grid">
         <a class="tile" href="#/blitz"><span class="num">${S.best('blitz') || ''}</span><b>בליץ <span class="yi">דער · די · דאָס</span></b><small>60 שניות, כמה שיותר מילים</small></a>
-        ${GAMES.map((d) => `<a class="tile" href="#/drill/${d.id}"><b>${Y.inline(d.title)}</b><small>${Y.inline(d.sub)}</small></a>`).join('')}
-      </div>
-      <h3>תרגילי שינון</h3>
+        ${GAMES.map(tile).join('')}
+      </div></details>
+      <details class="fold"><summary>תרגילי שינון לפי נושא <small>${DRILLS.length}</small></summary>
       <div class="grid">
-        ${DRILLS.map((d) => `<a class="tile" href="#/drill/${d.id}"><b>${Y.inline(d.title)}</b><small>${Y.inline(d.sub)}</small></a>`).join('')}
-      </div>`);
+        ${DRILLS.map(tile).join('')}
+      </div></details>`);
   }
 
   function viewDrill(id) {
@@ -578,29 +708,92 @@
     runSession(genItems(d.spec, d.n, d.unit), { back: '#/practice', again: '#/drill/' + id });
   }
 
-  /* Today's session: fix mistakes, review what is due, then practise the weakest and the next unit. */
-  function dailyItems() {
-    const items = S.state.mistakes.slice(0, 3).map((m) => Object.assign({}, m));
+  /* Today's session, in a fixed order: warm up with reviews, one new thing with its short explanation,
+     mixed practice ending on a proverb, and a sentence or two of her own writing. */
+  const WRITE_PROMPTS = ['מה עשית היום?', 'מה את רואה עכשיו מהחלון או בחדר?', 'ספרי על מישהו מהמשפחה.', 'מה תעשי מחר?', 'מה אכלת היום, ואיפה?', 'ספרי על מקום שאת אוהבת.', 'מה קרה השבוע שכדאי לזכור?'];
+
+  function viewDaily() {
+    const here = '#/daily';
+    const alive = () => location.hash === here;
     const t = S.today();
-    const personal = Y.shuffle((S.state.personal || []).filter((p) => { const st = S.srs(p.srs || p.key); return !st || st.d <= t; })).slice(0, 2);
-    items.push(...personal.map((p) => Object.assign({}, p)));
+    const all = [];
+    const dedupe = (items) => { const seen = new Set(); return items.filter((it) => { const k = it.key + '|' + (it.q || it.he); if (seen.has(k)) return false; seen.add(k); return true; }); };
+
+    // 1. warm-up: what is due and what went wrong last time
+    const warm = S.state.mistakes.slice(0, 3).map((m) => Object.assign({}, m));
+    warm.push(...Y.shuffle((S.state.personal || []).filter((p) => { const st = S.srs(p.srs || p.key); return !st || st.d <= t; })).slice(0, 2).map((p) => Object.assign({}, p)));
     const due = [];
-    for (const d of D.decks) for (const w of d.words) {
-      const s = S.srs('v:' + w.y);
-      if (s && s.d <= t) due.push([d.id, w]);
-    }
-    for (const [did, w] of Y.shuffle(due).slice(0, 3)) items.push(G.vocab(did, w));
-    for (let k = Math.min(due.length, 3); k < 2; k++) items.push(G.vocab(Y.pick(D.decks).id));
-    items.push(...genItems(['gender'], 2, 'b1'));
-    items.push(...genItems(['hunt'], 1), ...genItems(['proverb'], 1));
-    // units that faded or are still weak, then the next unit in the course
-    const started = D.units.filter((u) => S.mastery(u.id) !== null && S.mastery(u.id) < 0.85)
-      .sort((a, b) => S.mastery(a.id) - S.mastery(b.id)).slice(0, 2);
-    for (const u of started) items.push(...G.unitRound(u, 2));
+    for (const d of D.decks) for (const w of d.words) { const s = S.srs('v:' + w.y); if (s && s.d <= t) due.push([d.id, w]); }
+    for (const [did, w] of Y.shuffle(due).slice(0, 3)) warm.push(G.vocab(did, w));
+    if (!due.length) warm.push(G.vocab(Y.pick(D.decks).id));
+    warm.push(...genItems(['gender'], 1, 'b1'));
+
+    // 2. the new thing: the next step of the next unit, if it still has steps to go
     const nu = nextUnit();
-    items.push(...G.unitRound(nu, started.some((u) => u.id === nu.id) ? 2 : 4));
-    const seen = new Set();
-    return Y.shuffle(items.filter((it) => { const k = it.key + '|' + (it.q || it.he); if (seen.has(k)) return false; seen.add(k); return true; })).slice(0, 15);
+    const steps = D.steps[nu.id];
+    const at = (S.state.units[nu.id] || {}).step || 0;
+    const hasNew = !!steps && at < steps.length;
+
+    // 3. mixed: units that faded or are still weak, a proofreading item, and a proverb to end on
+    const weak = D.units.filter((u) => S.mastery(u.id) !== null && S.mastery(u.id) < 0.85 && !(hasNew && u.id === nu.id))
+      .sort((a, b) => S.mastery(a.id) - S.mastery(b.id)).slice(0, 2);
+    const mixed = [];
+    for (const u of weak) mixed.push(...G.unitRound(u, 2));
+    if (!hasNew) mixed.push(...G.unitRound(nu, 4));
+    mixed.push(...genItems(['hunt'], 1));
+    const last = genItems(['proverb'], 1);
+
+    const parts = hasNew ? 3 : 2;
+    const note = (k, name) => `חלק ${k} מתוך ${parts} · ${name}`;
+    const opts = (extra) => Object.assign({ back: '#/home' }, extra);
+    const keep = (next) => (log) => { all.push(...log); if (alive()) next(); };
+
+    const result = (wrote) => showResult(all, { back: '#/home', again: here, daily: true, wrote });
+
+    const write = () => {
+      const topic = WRITE_PROMPTS[t % WRITE_PROMPTS.length];
+      Y.views.check({
+        head: `<div class="run-note">ולסיום · כתיבה משלך</div>
+          <h2 style="margin-top:0">משפט או שניים ביידיש</h2>
+          <p class="lead">${esc(topic)} ${hasNew || weak.length ? `אם מתאים, נסי לשלב את מה שתרגלת היום: ${Y.inline((hasNew ? nu : weak[0]).title)}.` : ''}</p>
+          <p><small>כותבים כמו שיוצא. הכתיב נבדק תוך כדי, ומילה שתתקני תחזור כתרגיל אישי.</small></p>`,
+        foot: '<div class="row" style="margin-top:20px"><button class="btn" id="wdone">סיימתי</button><button class="btn ghost" id="wskip">לדלג היום</button></div>',
+      });
+      const txt = $app.querySelector('#txt');
+      $app.querySelector('#wdone').addEventListener('click', () => result((txt.value.trim().match(/\S+/g) || []).length));
+      $app.querySelector('#wskip').addEventListener('click', () => result(0));
+    };
+
+    const runMixed = () => runSession(dedupe(Y.shuffle(mixed)).concat(last), opts({ note: note(parts, 'תרגול מעורב'), then: keep(write) }));
+
+    const runNew = () => {
+      const st = steps[at];
+      const blocks = nu.text.split(/\n\s*\n/);
+      const text = st[0].map((b) => blocks[b]).join('\n\n');
+      const items = G.stepItems(nu, st[1], 4);
+      const advance = () => { S.unit(nu.id).step = Math.max(S.unit(nu.id).step || 0, at + 1); S.save(); runMixed(); };
+      const explain = () => {
+        if (!alive()) return;
+        render(`<div class="run-note">${note(2, 'הדבר החדש של היום')}</div>
+          <h2 style="margin-top:0">${Y.inline(nu.title)}</h2>
+          <p><small>צעד ${at + 1} מתוך ${steps.length} ביחידה</small></p>
+          <div class="lesson step-text">${Y.fmt(text)}</div>
+          <div class="row" style="margin-top:20px"><button class="btn" id="go">${items.length ? 'לתרגל את זה' : 'הבנתי, הלאה'}</button></div>`);
+        const go = () => {
+          enterHandler = null;
+          if (!items.length) return advance();
+          runSession(items, opts({ unitId: nu.id, ruleText: text, note: note(2, 'הדבר החדש של היום'), then: (log) => { all.push(...log); if (alive()) advance(); } }));
+        };
+        $app.querySelector('#go').addEventListener('click', go);
+        enterHandler = go;
+      };
+      // ask first, explain afterwards
+      const first = st[1].map((i) => G.fromTuple(nu.ex[i], nu.id, i)).find((x) => x && x.t === 'm');
+      if (!first) return explain();
+      runSession([first], opts({ unitId: nu.id, noRule: true, noRetry: true, noRecord: true, pre: true, note: note(2, 'לפני ההסבר: איך היית אומרת?'), then: explain }));
+    };
+
+    runSession(dedupe(Y.shuffle(warm)), opts({ note: note(1, 'חימום: חזרות'), then: keep(hasNew ? runNew : runMixed) }));
   }
 
   /* Placement: two questions per unit (one multiple choice, one typed); a unit passes only with both right. */
@@ -637,6 +830,7 @@
     runSession(items, {
       back: '#/diag',
       noRule: true,
+      noRetry: true,
       unitId: 'diag',
       onDone(log) {
         const res = {};
@@ -908,6 +1102,30 @@
     render(`<a class="crumb" href="#/tools">→ כלים</a><h1>טבלאות</h1><p class="lead">כל הטבלאות במקום אחד, לעיון מהיר בזמן כתיבה.</p><div class="lesson">${Y.fmt(REF)}</div>`);
   }
 
+  /* ---------- questions for the teacher ---------- */
+
+  function viewFlags() {
+    render(`<a class="crumb" href="#/tools">→ כלים</a><h1>שאלות למורה</h1>
+      <div class="card stack">
+        ${(S.state.flags || []).length ? `
+        <p style="margin:0"><small>תרגילים שסימנת ב"לשאול את המורה". אפשר להעתיק את כולם ולשלוח.</small></p>
+        <ul class="miss" style="margin:0">${S.state.flags.map((f, k) => `<li><span class="yi">${esc(f.q)}</span><br><small>התשובה בכלי: <span class="yi">${esc(f.correct)}</span>${f.given ? ' · עניתי: <span class="yi">' + esc(f.given) + '</span>' : ''}</small> <button class="linkbtn" data-unflag="${k}">הסרה</button></li>`).join('')}</ul>
+        <div class="row"><button class="btn ghost small" id="cpflags">העתקת כל השאלות</button></div>` : '<p style="margin:0"><small>אחרי כל תרגיל יש כפתור "לשאול את המורה". מה שתסמני שם ייאסף כאן, כדי שתוכלי לברר אותו בשיעור.</small></p>'}
+      </div>
+
+      <h3>בדיקת התוכן</h3>
+      <div class="card stack">
+        <p style="margin:0"><small>כל היידיש שבכלי בדף אחד, מסודר להדפסה או לשליחה: שמות העצם לפי מין, הפעלים, הכתיב, המילים, הטקסטים והתרגילים. מיועד למורה שתעבור על התוכן.</small></p>
+        <div class="row"><a class="btn ghost small" href="#/review">דף לבדיקת מורה</a></div>
+      </div>`);
+    $app.querySelectorAll('[data-unflag]').forEach((b) => b.addEventListener('click', () => { S.removeFlag(+b.dataset.unflag); viewFlags(); }));
+    const cpf = $app.querySelector('#cpflags');
+    if (cpf) cpf.addEventListener('click', async () => {
+      const text = 'שאלות על תרגילים מהכלי "ייִדיש כּהלכה":\n\n' + S.state.flags.map((f, k) => `${k + 1}. ${f.q}\n   התשובה בכלי: ${f.correct}${f.given ? '\n   אני עניתי: ' + f.given : ''}${f.ex ? '\n   ההסבר בכלי: ' + f.ex : ''}`).join('\n\n');
+      try { await navigator.clipboard.writeText(text); cpf.textContent = 'הועתק'; } catch (e) { cpf.textContent = 'ההעתקה נחסמה'; }
+    });
+  }
+
   /* ---------- settings ---------- */
 
   function viewSettings(msg) {
@@ -926,20 +1144,6 @@
         <label class="field"><span>מפתח API</span><input id="key" type="password" dir="ltr" autocomplete="off" placeholder="sk-ant-..." value="${esc(st.apiKey)}"></label>
         <label class="field"><span>מודל</span><select id="model">${Y.ai.MODELS.map(([id, name]) => `<option value="${id}" ${st.model === id ? 'selected' : ''}>${name}</option>`).join('')}</select></label>
         <div class="row"><button class="btn small" id="savekey">שמירה</button>${st.apiKey ? '<button class="btn ghost small" id="delkey">מחיקת המפתח</button>' : ''}</div>
-      </div>
-
-      <h3>שאלות למורה</h3>
-      <div class="card stack">
-        ${(S.state.flags || []).length ? `
-        <p style="margin:0"><small>תרגילים שסימנת ב"לשאול את המורה". אפשר להעתיק את כולם ולשלוח.</small></p>
-        <ul class="miss" style="margin:0">${S.state.flags.map((f, k) => `<li><span class="yi">${esc(f.q)}</span><br><small>התשובה בכלי: <span class="yi">${esc(f.correct)}</span>${f.given ? ' · עניתי: <span class="yi">' + esc(f.given) + '</span>' : ''}</small> <button class="linkbtn" data-unflag="${k}">הסרה</button></li>`).join('')}</ul>
-        <div class="row"><button class="btn ghost small" id="cpflags">העתקת כל השאלות</button></div>` : '<p style="margin:0"><small>אחרי כל תרגיל יש כפתור "לשאול את המורה". מה שתסמני שם ייאסף כאן, כדי שתוכלי לברר אותו בשיעור.</small></p>'}
-      </div>
-
-      <h3>בדיקת התוכן</h3>
-      <div class="card stack">
-        <p style="margin:0"><small>כל היידיש שבכלי בדף אחד, מסודר להדפסה או לשליחה: שמות העצם לפי מין, הפעלים, הכתיב, המילים, הטקסטים והתרגילים. מיועד למורה שתעבור על התוכן.</small></p>
-        <div class="row"><a class="btn ghost small" href="#/review">דף לבדיקת מורה</a></div>
       </div>
 
       <h3>סנכרון בין מכשירים</h3>
@@ -977,12 +1181,6 @@
         </div>
       </div>`);
     $app.querySelector('#strict').addEventListener('change', (e) => S.setSetting('strict', e.target.checked));
-    $app.querySelectorAll('[data-unflag]').forEach((b) => b.addEventListener('click', () => { S.removeFlag(+b.dataset.unflag); viewSettings(); }));
-    const cpf = $app.querySelector('#cpflags');
-    if (cpf) cpf.addEventListener('click', async () => {
-      const text = 'שאלות על תרגילים מהכלי "ייִדיש כּהלכה":\n\n' + S.state.flags.map((f, k) => `${k + 1}. ${f.q}\n   התשובה בכלי: ${f.correct}${f.given ? '\n   אני עניתי: ' + f.given : ''}${f.ex ? '\n   ההסבר בכלי: ' + f.ex : ''}`).join('\n\n');
-      try { await navigator.clipboard.writeText(text); cpf.textContent = 'הועתק'; } catch (e) { cpf.textContent = 'ההעתקה נחסמה'; }
-    });
     const smsg = (t, bad) => { $app.querySelector('#syncmsg').innerHTML = t ? `<p class="${bad ? 'alert' : ''}" style="margin:0">${t}</p>` : ''; };
     const son = $app.querySelector('#syncon');
     if (son) son.addEventListener('click', async () => {
@@ -1046,17 +1244,17 @@
     document.querySelectorAll('#nav a').forEach((n) => {
       const on = n.dataset.r === a || (n.dataset.r === 'learn' && ['unit', 'diag', 'read'].includes(a)) ||
         (n.dataset.r === 'practice' && ['drill', 'daily', 'mistakes', 'blitz', 'personal'].includes(a)) ||
-        (n.dataset.r === 'tools' && ['check', 'dict', 'lab', 'ai', 'ref'].includes(a)) ||
+        (n.dataset.r === 'tools' && ['check', 'dict', 'lab', 'ai', 'ref', 'flags', 'review'].includes(a)) ||
         (n.dataset.r === 'words' && ['deck', 'mywords'].includes(a));
       n.classList.toggle('on', on);
       if (on) n.setAttribute('aria-current', 'page'); else n.removeAttribute('aria-current');
     });
     if (a === 'learn') return viewLearn();
-    if (a === 'unit') return c === 'go' ? viewUnitGo(b) : viewUnit(b);
+    if (a === 'unit') return c === 'go' ? viewUnitGo(b) : c === 'steps' ? viewUnitSteps(b) : viewUnit(b);
     if (a === 'practice') return viewPractice();
     if (a === 'track') return Y.views.track(b, c);
     if (a === 'drill') return viewDrill(b);
-    if (a === 'daily') return runSession(dailyItems(), { back: '#/home', again: '#/daily', daily: true });
+    if (a === 'daily') return viewDaily();
     if (a === 'personal') return runSession(Y.shuffle((S.state.personal || []).slice()).slice(0, 12).map((x) => Object.assign({}, x)), { back: '#/practice', again: '#/personal' });
     if (a === 'read') return Y.views.read(b);
     if (a === 'review') return Y.views.review();
@@ -1067,6 +1265,7 @@
     if (a === 'mywords') return runSession(Y.shuffle(S.state.mywords).slice(0, 12).map((w) => G.myword(w)), { back: '#/words', again: '#/mywords' });
     if (a === 'ai') return viewAi(b === 'chat' ? 'chat' : 'check');
     if (a === 'ref') return viewRef();
+    if (a === 'flags') return viewFlags();
     if (a === 'tools') return Y.views.tools();
     if (a === 'check') return Y.views.check();
     if (a === 'dict') return Y.views.dict();

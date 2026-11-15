@@ -359,6 +359,16 @@
     return null;
   };
 
+  /* The exercises of one step of a unit, in the given order; an item already recognised in multiple choice comes back typed. */
+  G.stepItems = (unit, idxs, size) => {
+    const st = Y.store.unit(unit.id);
+    const strict = unit.group === 'A';
+    return idxs.map((i) => G.fromTuple(unit.ex[i], unit.id, i)).filter(Boolean).slice(0, size).map((h) => (
+      st.ok[h.key] >= 1 && h.t === 'm' && h.a.split(' ').length <= 3 && /___/.test(h.q)
+        ? { t: 't', q: h.q, he: h.he || 'הקלידי את החסר', a: [h.a], ex: h.ex, unit: h.unit, key: h.key, strict }
+        : h));
+  };
+
   /* Build a practice round for a unit: unsolved hand-written items first, then generated ones. */
   G.unitRound = (unit, size) => {
     const st = Y.store.unit(unit.id);

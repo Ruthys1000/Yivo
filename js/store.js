@@ -202,7 +202,7 @@
         const b = r.units[id];
         const pick = !a || (b.last || 0) > (a.last || 0) || ((b.last || 0) === (a.last || 0) && (b.hist || []).length > (a.hist || []).length) ? b : a;
         const days = [...new Set([...((a && a.okDays) || []), ...(b.okDays || [])])].sort((x, y) => x - y).slice(-6);
-        S.units[id] = Object.assign({}, pick, { okDays: days, ok: Object.assign({}, (pick === a ? b : a || {}).ok, pick.ok) });
+        S.units[id] = Object.assign({}, pick, { step: Math.max((a && a.step) || 0, b.step || 0), okDays: days, ok: Object.assign({}, (pick === a ? b : a || {}).ok, pick.ok) });
       }
       const uniq = (list, key) => { const seen = new Set(); return list.filter((x) => { const k = x[key]; if (seen.has(k)) return false; seen.add(k); return true; }); };
       S.mywords = uniq([...(S.mywords || []), ...(r.mywords || [])], 'y');
