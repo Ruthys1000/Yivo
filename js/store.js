@@ -4,7 +4,7 @@
   const KEY = 'yivo.v1';
   const INTERVALS = [0, 1, 3, 7, 16, 35, 90];
 
-  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, personal: [], lastExport: 0, read: {}, flags: [], track: {}, settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
+  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, personal: [], lastExport: 0, read: {}, flags: [], track: {}, acc: {}, snap: {}, settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
 
   let S = blank();
   try {
@@ -116,7 +116,62 @@
           if (S.mistakes.length > 80) S.mistakes.pop();
         }
       }
+      // first-attempt accuracy per day: [answers, right, produced (typed or built), produced right]
+      if (!S.acc) S.acc = {};
+      const ac = S.acc[t] || [0, 0, 0, 0];
+      ac[0]++;
+      if (correct) ac[1]++;
+      if (item.t === 't' || item.t === 'o') { ac[2]++; if (correct) ac[3]++; }
+      S.acc[t] = ac;
+      // one snapshot a day of where she stands, so progress can be compared over time
+      if (!S.snap) S.snap = {};
+      const st = store.standing();
+      S.snap[t] = [Math.round(st.pts * 100) / 100, st.sitting, st.known];
+      for (const k in S.snap) if (+k < t - 400) delete S.snap[k];
+      for (const k in S.acc) if (+k < t - 400) delete S.acc[k];
       save();
+    },
+
+    /* Where she stands right now, from durable mastery only (never from the number of answers):
+       pts = the sum of unit mastery scores, which need good days on three different days and fade without review. */
+    standing() {
+      const units = (Y.data && Y.data.units) || [];
+      let pts = 0;
+      let sitting = 0;
+      for (const u of units) {
+        const m = store.mastery(u.id) || 0;
+        pts += m;
+        if (m >= 0.85) sitting++;
+      }
+      let known = 0;
+      for (const k in S.srs) if (S.srs[k].b >= 3) known++;
+      const total = units.length || 1;
+      const frac = pts / total;
+      const level = Math.min(10, Math.floor(frac * 10) + 1);
+      const toNext = level >= 10 ? 0 : (level / 10) * total - pts;
+      const inLevel = level >= 10 ? 1 : frac * 10 - (level - 1);
+      return { pts, total, sitting, known, level, toNext, inLevel };
+    },
+    /* The latest snapshot from at least `days` days ago; failing that, the earliest one from before today. */
+    snapBefore(days) {
+      const t = today();
+      const keys = Object.keys(S.snap || {}).map(Number).sort((a, b) => a - b);
+      const old = keys.filter((k) => k <= t - days);
+      const k = old.length ? old[old.length - 1] : keys.find((x) => x < t);
+      return k === undefined ? null : { day: k, ago: t - k, pts: S.snap[k][0], sitting: S.snap[k][1], known: S.snap[k][2] };
+    },
+    /* First-attempt accuracy over a window of days ending `end` days ago. */
+    accWindow(end, len) {
+      const t = today();
+      const sum = [0, 0, 0, 0];
+      let days = 0;
+      for (let d = t - end - len + 1; d <= t - end; d++) {
+        const a = (S.acc || {})[d];
+        if (!a) continue;
+        days++;
+        for (let i = 0; i < 4; i++) sum[i] += a[i];
+      }
+      return { n: sum[0], acc: sum[0] ? sum[1] / sum[0] : null, pn: sum[2], pacc: sum[2] ? sum[3] / sum[2] : null, days };
     },
 
     streak() {
@@ -211,6 +266,9 @@
       if (newer) S.mistakes = r.mistakes || [];
       S.diag = r.diag || S.diag ? (newer ? Object.assign({}, S.diag, r.diag) : Object.assign({}, r.diag, S.diag)) : null;
       S.read = Object.assign({}, r.read, S.read);
+      if (!S.acc) S.acc = {};
+      for (const d in r.acc || {}) { const a = S.acc[d]; const b = r.acc[d]; S.acc[d] = a ? a.map((x, i) => Math.max(x, b[i] || 0)) : b; }
+      S.snap = newer ? Object.assign({}, S.snap, r.snap) : Object.assign({}, r.snap, S.snap);
       for (const k in r.best || {}) S.best[k] = Math.max(S.best[k] || 0, r.best[k]);
       S.lastExport = Math.max(S.lastExport || 0, r.lastExport || 0);
       if (!S.track) S.track = {};

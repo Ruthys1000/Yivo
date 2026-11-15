@@ -468,3 +468,22 @@ details.fold .grid { margin-top: 8px; }
 details.fold .lesson { margin-top: 4px; }
 .keys[hidden] { display: none; }
 .fb .keys { margin: 8px 0 0; }
+
+/* level and progress page */
+a.levelcard { display: block; text-decoration: none; color: inherit; }
+a.levelcard:hover { border-color: var(--accent); }
+a.levelcard b small { font-weight: 600; color: var(--muted); }
+a.levelcard .more { display: block; margin-top: 8px; color: var(--muted); }
+table.cmp { width: 100%; font-size: .92rem; }
+table.cmp th { text-align: start; font-weight: 600; color: var(--muted); }
+table.cmp td, table.cmp th { padding: 6px 4px; font-variant-numeric: tabular-nums; }
+.dup { color: var(--ok); font-weight: 700; direction: ltr; unicode-bidi: isolate; }
+.ddn { color: var(--bad); font-weight: 700; direction: ltr; unicode-bidi: isolate; }
+.d0 { color: var(--muted); }
+.cmpnote { margin: 4px 0 0; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.cal i { height: 18px; border-radius: 5px; background: var(--paper); border: 1px solid var(--line); }
+.cal i.some { background: var(--accent-soft); border-color: transparent; }
+.cal i.full { background: var(--accent); border-color: transparent; }
+details.how summary { cursor: pointer; font-size: .9rem; color: var(--muted); }
+details.how p { margin: 6px 0 0; }
