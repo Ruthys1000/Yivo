@@ -34,11 +34,15 @@
       ['n', 'מופשטת ומסתיימת ב־{ות} ← לרוב {דאָס}.'],
       ['m', 'כל השאר ← לרוב {דער}.'],
     ], note: 'אין כלל ש"מילה עברית היא {דאָס}". וגם המין בעברית לא קובע: הולכים לפי הסיומת.' },
-    { id: 't2', stage: 2, title: 'לשון־קודש: היוצאות מן הנטייה', kinds: ['heb-x'], lines: [], note: 'אלה המילים שבהן הנטייה מטעה. הן מעטות, ולכן שווה לזכור אותן אחת־אחת. בסבב הן מעורבבות עם מילים שכן הולכות לפי הנטייה.', mix: ['heb-h', 'heb-m'] },
+    { id: 't2', stage: 2, late: true, title: 'לשון־קודש: היוצאות מן הנטייה', kinds: ['heb-x'], lines: [], note: 'אלה המילים שבהן הנטייה מטעה. הן מעטות, ולכן שווה לזכור אותן אחת־אחת, אבל רק אחרי שהנטייה עצמה כבר יושבת. בסבב הן מעורבבות עם מילים שכן הולכות לפי הנטייה.', mix: ['heb-h', 'heb-m'] },
     { id: 't3', stage: 2, title: 'מילה שמסתיימת ב־ע', kinds: ['e'], lines: [
       ['f', 'מילה שמסתיימת ב־{ע} היא לרוב {די}.'],
     ], note: 'יוצאים מזה שמות של זכרים ({דער טאַטע, דער זיידע}), שהולכים לפי הכלל של אנשים.' },
   ];
+
+  // the order of learning: every rule and tendency first, the exceptions last
+  RULES.sort((a, b) => (a.late ? 1 : 0) - (b.late ? 1 : 0));
+  const MAIN = RULES.filter((r) => !r.late);
 
   const byKind = {};
   for (const n of D.nouns) { const k = G.genderInfo(n).kind; (byKind[k] = byKind[k] || []).push(n); }
@@ -77,6 +81,7 @@
     const first = [];
     let timer = null;
     let locked = false;
+    let requeue = false;
     Y.ui.cleanup = () => clearTimeout(timer);
 
     const draw = (fb) => {
@@ -97,6 +102,7 @@
 
     const next = () => {
       clearTimeout(timer);
+      if (requeue) { requeue = false; queue.splice(Math.min(3, queue.length), 0, queue.shift()); }
       if (!queue.length) return o.then(first);
       draw();
     };
@@ -121,8 +127,8 @@
           <div class="row"><button class="btn small" id="snext">${queue.length ? 'הבא' : 'הלאה'}</button></div></div>`);
         timer = setTimeout(next, why ? 2600 : 1400);
       } else {
-        // it comes back after two other words
-        queue.splice(Math.min(3, queue.length), 0, queue.shift());
+        // the missed word stays on screen with its answer; it comes back after two other words
+        requeue = true;
         draw(`<div class="fb no"><h4>לא במגירה הזאת</h4><p class="ans g-${cur.g}">${esc(G.phraseOf(cur))}</p><p>${GN[cur.g]}.${cur.alt ? ` מקובל גם ${esc(art(cur.alt))}.` : ''} אמרי את הצירוף בקול פעם אחת.</p>${why}
           <div class="row"><button class="btn small" id="snext">הבא</button></div></div>`);
       }
@@ -193,13 +199,13 @@
     const today = checks()[t];
     const start = () => {
       // two or three words from every rule, so no rule can hide behind the others
-      const words = RULES.flatMap((r) => Y.shuffle(ofKinds(r.kinds)).slice(0, r.kinds.includes('heb-x') ? 3 : 4));
+      const words = MAIN.flatMap((r) => Y.shuffle(ofKinds(r.kinds)).slice(0, 4));
       sortGame(words, { back: '#/gender/check', note: 'בדיקת החוקים · בלי הסבר', quiet: true, then: (first) => {
         const x = ratio(first);
         if (!S.state.gcheck) S.state.gcheck = {};
         S.state.gcheck[t] = Math.max(S.state.gcheck[t] || 0, x);
         S.save();
-        const rows = RULES.map((r) => {
+        const rows = MAIN.map((r) => {
           const mine = first.filter((l) => ruleOf(l.n) === r);
           const ok = mine.filter((l) => l.ok).length;
           const missed = mine.filter((l) => !l.ok).map((l) => `<span class="yi g-${l.n.g}">${esc(art(l.n.g) + ' ' + l.n.w)}</span>`).join(' · ');
@@ -216,7 +222,7 @@
     };
     Y.ui.render(`<a class="crumb" href="#/gender">→ המין</a>
       <h1>בדיקת החוקים</h1>
-      <p class="lead">כ־23 מילים מכל החוקים והנטיות של שלבים 1 ו־2, מעורבבות, בלי לקרוא את החוק לפני ובלי הסבר אחרי תשובה נכונה. כך רואים אם החוקים יושבים, ולא רק אם ההסבר עוד טרי.</p>
+      <p class="lead">20 מילים מכל החוקים והנטיות של שלבים 1 ו־2, מעורבבות, רק מילים שהולכות לפי הכלל ובלי יוצאות דופן, בלי לקרוא את החוק לפני ובלי הסבר אחרי תשובה נכונה. כך רואים אם החוקים יושבים, ולא רק אם ההסבר עוד טרי.</p>
       <div class="card stack">
         <div><b>${days >= 2 ? 'החוקים יושבים' : `${days} מתוך 2 ימים`}</b><br>
         <small>החוקים נחשבים "יושבים" אחרי 90% לפחות בשני ימים שונים. ${today !== undefined ? `היום: ${Math.round(today * 100)}%.` : 'היום עוד לא נבדקת.'}${today >= CHECK_PASS && days < 2 ? ' בדיקה נוספת היום לא תוסיף יום; חזרי מחר.' : ''}</small></div>
@@ -230,7 +236,7 @@
 
   const viewIndex = () => {
     const stub = G.stubborn();
-    const cur = RULES.find((r) => !passed(r.id)) || GROUPS.find((g) => !passed(g.id));
+    const cur = MAIN.find((r) => !passed(r.id)) || (goodDays() < 2 ? null : RULES.find((r) => !passed(r.id)) || GROUPS.find((g) => !passed(g.id)));
     const tile = (id, href, small, title, sub) => `<a class="tile${cur && cur.id === id ? ' next' : ''}" href="${href}"><span class="num">${passed(id) ? '✓' : tr(id) ? Math.round(tr(id).b * 100) + '%' : ''}</span>${small ? `<small>${small}</small>` : ''}<b>${title}</b><small>${sub}</small></a>`;
     const ruleTile = (r) => tile(r.id, '#/gender/' + r.id, cur && cur.id === r.id ? 'כאן ממשיכים' : '', Y.inline(r.title), `${ofKinds(r.kinds).length} מילים`);
     const doneG = GROUPS.filter((g) => passed(g.id)).length;
@@ -243,10 +249,13 @@
       <div class="group-head"><h2>שלב 1 · חוקים</h2><small>כאן לא זוכרים מילים אלא חוק. מי שיודעת את החוק יודעת את המין גם של מילה חדשה.</small></div>
       <div class="grid" style="margin-top:10px">${RULES.filter((r) => r.stage === 1).map(ruleTile).join('')}</div>
 
-      <div class="group-head"><h2>שלב 2 · נטיות</h2><small>נכון ברוב המקרים. קודם הנטייה, ואז בנפרד המעטות שיוצאות ממנה.</small></div>
-      <div class="grid" style="margin-top:10px">${RULES.filter((r) => r.stage === 2).map(ruleTile).join('')}</div>
+      <div class="group-head"><h2>שלב 2 · נטיות</h2><small>נכון ברוב המקרים. כאן רק המילים שהולכות לפי הנטייה; היוצאות ממנה באות בנפרד, בסוף.</small></div>
+      <div class="grid" style="margin-top:10px">${MAIN.filter((r) => r.stage === 2).map(ruleTile).join('')}</div>
 
-      <a class="tile${RULES.every((r) => passed(r.id)) && goodDays() < 2 ? ' next' : ''}" href="#/gender/check" style="margin-top:12px"><span class="num">${goodDays() >= 2 ? '✓' : goodDays() + '/2'}</span><b>בדיקת החוקים</b><small>כל החוקים והנטיות מעורבבים, בלי הסבר. יושבים אחרי 90% בשני ימים שונים.</small></a>
+      <a class="tile${MAIN.every((r) => passed(r.id)) && goodDays() < 2 ? ' next' : ''}" href="#/gender/check" style="margin-top:12px"><span class="num">${goodDays() >= 2 ? '✓' : goodDays() + '/2'}</span><b>בדיקת החוקים</b><small>כל החוקים והנטיות מעורבבים, בלי הסבר ובלי יוצאות דופן. יושבים אחרי 90% בשני ימים שונים.</small></a>
+
+      <div class="group-head"><h2>רק אחרי שהחוקים יושבים · יוצאות מן הכלל</h2><small>${goodDays() >= 2 ? 'החוקים יושבים, אפשר להוסיף את המעטות שיוצאות מהם.' : 'עדיף לחכות עם זה עד שבדיקת החוקים עוברת בשני ימים, כדי שלא יתערבב.'}</small></div>
+      <div class="grid" style="margin-top:10px">${RULES.filter((r) => r.late).map(ruleTile).join('')}</div>
 
       <div class="group-head"><h2>שלב 3 · מילים בלי סימן</h2><small>${(byKind.none || []).length} מילים ב־${GROUPS.length} קבוצות של שש. עברת ${doneG}. קבוצה אחת ביום מספיקה; יותר מזה מתערבב.</small></div>
       <div class="grid" style="margin-top:10px">${GROUPS.map((g, i) => tile(g.id, '#/gender/' + g.id, cur && cur.id === g.id ? 'כאן ממשיכים' : '', 'קבוצה ' + (i + 1), `<span class="yi">${g.words.map((n) => `<span class="g-${n.g}">${esc(n.w)}</span>`).join(' · ')}</span>`)).join('')}</div>
@@ -263,12 +272,12 @@
       sortGame(words, { back: '#/gender/' + r.id, note: Y.inline(r.title), then: (first) => {
         const x = ratio(first);
         S.setTrack('gd:' + r.id, x);
-        const nx = RULES[RULES.indexOf(r) + 1];
+        const nx = r.late ? null : MAIN[MAIN.indexOf(r) + 1];
         result(x >= PASS ? 'החוק הזה עבר' : 'עוד לא 80%', [
           `${first.filter((l) => l.ok).length} מתוך ${first.length} בניסיון ראשון.`,
           x >= PASS ? 'כדי שיישב לאורך זמן, המילים האלה יחזרו בסשן היומי.' : 'כדאי לקרוא שוב את החוק ולעשות סבב נוסף לפני שממשיכים.',
         ], x >= PASS
-          ? [[nx ? '#/gender/' + nx.id : '#/gender/check', nx ? 'הבא: ' + Y.inline(nx.title) : 'לבדיקת החוקים'], ['#/gender', 'כל השלבים', true]]
+          ? [[nx ? '#/gender/' + nx.id : r.late ? '#/gender/' + GROUPS[0].id : '#/gender/check', nx ? 'הבא: ' + Y.inline(nx.title) : r.late ? 'לשלב 3' : 'לבדיקת החוקים'], ['#/gender', 'כל השלבים', true]]
           : [['#/gender/' + r.id, 'לחוק ולסבב נוסף'], ['#/gender', 'כל השלבים', true]]);
       } });
     };
