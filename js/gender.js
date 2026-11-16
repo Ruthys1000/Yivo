@@ -113,6 +113,7 @@
       }
       const info = G.genderInfo(cur);
       const why = info.kind === 'none' ? '' : `<p><small>${Y.inline(info.text)}</small></p>`;
+      if (ok && o.quiet) { queue.shift(); placed[g].push(cur); return next(); }
       if (ok) {
         queue.shift();
         placed[g].push(cur);
@@ -179,6 +180,52 @@
   const result = (title, lines, links) => Y.ui.render(`<div class="card stack"><div><h2>${title}</h2>${lines.map((l) => `<p class="lead" style="margin:6px 0 0">${l}</p>`).join('')}</div>
     <div class="row">${links.map(([href, label, ghost]) => `<a class="btn${ghost ? ' ghost' : ''}" href="${href}">${label}</a>`).join('')}</div></div>`);
 
+  /* ---------- checkpoint: do the rules hold when mixed, with no explanation first? ---------- */
+
+  const CHECK_PASS = 0.9;
+  const checks = () => S.state.gcheck || {};
+  const goodDays = () => Object.keys(checks()).filter((d) => checks()[d] >= CHECK_PASS).length;
+  const ruleOf = (n) => { const k = G.genderInfo(n).kind; return RULES.find((r) => r.kinds.includes(k)); };
+
+  const viewCheck = () => {
+    const t = S.today();
+    const days = goodDays();
+    const today = checks()[t];
+    const start = () => {
+      // two or three words from every rule, so no rule can hide behind the others
+      const words = RULES.flatMap((r) => Y.shuffle(ofKinds(r.kinds)).slice(0, r.kinds.includes('heb-x') ? 3 : 4));
+      sortGame(words, { back: '#/gender/check', note: 'בדיקת החוקים · בלי הסבר', quiet: true, then: (first) => {
+        const x = ratio(first);
+        if (!S.state.gcheck) S.state.gcheck = {};
+        S.state.gcheck[t] = Math.max(S.state.gcheck[t] || 0, x);
+        S.save();
+        const rows = RULES.map((r) => {
+          const mine = first.filter((l) => ruleOf(l.n) === r);
+          const ok = mine.filter((l) => l.ok).length;
+          const missed = mine.filter((l) => !l.ok).map((l) => `<span class="yi g-${l.n.g}">${esc(art(l.n.g) + ' ' + l.n.w)}</span>`).join(' · ');
+          return `<tr><th><a href="#/gender/${r.id}">${Y.inline(r.title)}</a>${missed ? `<br><small>${missed}</small>` : ''}</th><td class="${ok === mine.length ? 'dup' : 'ddn'}">${ok}/${mine.length}</td></tr>`;
+        }).join('');
+        const d2 = goodDays();
+        Y.ui.render(`<div class="card stack"><div><h2>${first.filter((l) => l.ok).length} מתוך ${first.length} בניסיון ראשון</h2>
+          <p class="lead" style="margin:6px 0 0">${x >= CHECK_PASS
+            ? (d2 >= 2 ? 'החוקים יושבים: עברת את הבדיקה בשני ימים שונים. מכאן המאמץ הולך למילים בלי סימן.' : 'עברת את הבדיקה היום. כדי לדעת שזה יושב ולא רק טרי, עשי אותה שוב ביום אחר.')
+            : 'עוד לא 90%. למטה רואים איזה חוק לא יושב; כדאי לחזור אליו לפני בדיקה נוספת.'}</p></div>
+          <div class="tablewrap"><table class="cmp"><tbody>${rows}</tbody></table></div>
+          <div class="row"><a class="btn" href="#/gender">חזרה לשלבים</a><a class="btn ghost" href="#/gender/check">לדף הבדיקה</a></div></div>`);
+      } });
+    };
+    Y.ui.render(`<a class="crumb" href="#/gender">→ המין</a>
+      <h1>בדיקת החוקים</h1>
+      <p class="lead">כ־23 מילים מכל החוקים והנטיות של שלבים 1 ו־2, מעורבבות, בלי לקרוא את החוק לפני ובלי הסבר אחרי תשובה נכונה. כך רואים אם החוקים יושבים, ולא רק אם ההסבר עוד טרי.</p>
+      <div class="card stack">
+        <div><b>${days >= 2 ? 'החוקים יושבים' : `${days} מתוך 2 ימים`}</b><br>
+        <small>החוקים נחשבים "יושבים" אחרי 90% לפחות בשני ימים שונים. ${today !== undefined ? `היום: ${Math.round(today * 100)}%.` : 'היום עוד לא נבדקת.'}${today >= CHECK_PASS && days < 2 ? ' בדיקה נוספת היום לא תוסיף יום; חזרי מחר.' : ''}</small></div>
+        <div class="row"><button class="btn" id="go">${today !== undefined ? 'בדיקה נוספת' : 'להתחיל בדיקה'}</button></div>
+      </div>
+      <p><small>מילה שתטעי בה כאן נספרת כמו בכל תרגיל אחר, ויכולה להיכנס למילים העקשניות.</small></p>`);
+    document.getElementById('go').addEventListener('click', start);
+  };
+
   /* ---------- views ---------- */
 
   const viewIndex = () => {
@@ -198,6 +245,8 @@
 
       <div class="group-head"><h2>שלב 2 · נטיות</h2><small>נכון ברוב המקרים. קודם הנטייה, ואז בנפרד המעטות שיוצאות ממנה.</small></div>
       <div class="grid" style="margin-top:10px">${RULES.filter((r) => r.stage === 2).map(ruleTile).join('')}</div>
+
+      <a class="tile${RULES.every((r) => passed(r.id)) && goodDays() < 2 ? ' next' : ''}" href="#/gender/check" style="margin-top:12px"><span class="num">${goodDays() >= 2 ? '✓' : goodDays() + '/2'}</span><b>בדיקת החוקים</b><small>כל החוקים והנטיות מעורבבים, בלי הסבר. יושבים אחרי 90% בשני ימים שונים.</small></a>
 
       <div class="group-head"><h2>שלב 3 · מילים בלי סימן</h2><small>${(byKind.none || []).length} מילים ב־${GROUPS.length} קבוצות של שש. עברת ${doneG}. קבוצה אחת ביום מספיקה; יותר מזה מתערבב.</small></div>
       <div class="grid" style="margin-top:10px">${GROUPS.map((g, i) => tile(g.id, '#/gender/' + g.id, cur && cur.id === g.id ? 'כאן ממשיכים' : '', 'קבוצה ' + (i + 1), `<span class="yi">${g.words.map((n) => `<span class="g-${n.g}">${esc(n.w)}</span>`).join(' · ')}</span>`)).join('')}</div>
@@ -219,7 +268,7 @@
           `${first.filter((l) => l.ok).length} מתוך ${first.length} בניסיון ראשון.`,
           x >= PASS ? 'כדי שיישב לאורך זמן, המילים האלה יחזרו בסשן היומי.' : 'כדאי לקרוא שוב את החוק ולעשות סבב נוסף לפני שממשיכים.',
         ], x >= PASS
-          ? [[nx ? '#/gender/' + nx.id : '#/gender/' + GROUPS[0].id, nx ? 'הבא: ' + Y.inline(nx.title) : 'לשלב 3'], ['#/gender', 'כל השלבים', true]]
+          ? [[nx ? '#/gender/' + nx.id : '#/gender/check', nx ? 'הבא: ' + Y.inline(nx.title) : 'לבדיקת החוקים'], ['#/gender', 'כל השלבים', true]]
           : [['#/gender/' + r.id, 'לחוק ולסבב נוסף'], ['#/gender', 'כל השלבים', true]]);
       } });
     };
@@ -283,6 +332,7 @@
 
   Y.views.gender = (a) => {
     if (a === 'stubborn') return viewStubborn();
+    if (a === 'check') return viewCheck();
     const r = RULES.find((x) => x.id === a);
     if (r) return viewRule(r);
     const g = GROUPS.find((x) => x.id === a);

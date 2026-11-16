@@ -1371,6 +1371,13 @@
   }
 
   window.addEventListener('hashchange', route);
+  // a link to the screen we are already on (e.g. "another round" on a result card) changes no hash, so render it again
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest ? e.target.closest('a[href^="#/"]') : null;
+    if (!link || e.defaultPrevented || link.getAttribute('href') !== location.hash) return;
+    e.preventDefault();
+    route();
+  });
   route();
 
   // sync on start and whenever the app comes back to the foreground; refresh the screen if other devices added progress
