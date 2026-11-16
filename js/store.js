@@ -52,7 +52,7 @@
       const days = Math.min(3, (u.okDays || []).length);
       const idle = u.last ? today() - u.last : 0;
       const fade = idle > 45 ? 0.7 : idle > 21 ? 0.85 : 1;
-      return { score: acc * [0.55, 0.75, 0.9, 1][days] * fade, acc, days, stale: idle > 21 };
+      return { score: acc * [0.55, 0.75, 0.9, 1][days] * fade, acc, days, fade, stale: idle > 21 };
     },
 
     srs: (key) => S.srs[key] || null,
@@ -124,7 +124,7 @@
       if (item.t === 't' || item.t === 'o') { ac[2]++; if (correct) ac[3]++; }
       S.acc[t] = ac;
       // one snapshot a day of where she stands, so progress can be compared over time
-      if (!S.snap) S.snap = {};
+      if (!S.snap || S.snapV !== 2) { S.snap = {}; S.snapV = 2; }
       const st = store.standing();
       S.snap[t] = [Math.round(st.pts * 100) / 100, st.sitting, st.known];
       for (const k in S.snap) if (+k < t - 400) delete S.snap[k];
@@ -132,16 +132,21 @@
       save();
     },
 
-    /* Where she stands right now, from durable mastery only (never from the number of answers):
-       pts = the sum of unit mastery scores, which need good days on three different days and fade without review. */
+    /* Where she stands right now, from durable mastery only (never from the number of answers).
+       Level points are stricter than the unit percentage: most of a unit's point comes from good practice
+       on different days, so answering well once in many units does not add up to a high level. */
+    LEVEL_W: [0.15, 0.4, 0.7, 1],
     standing() {
       const units = (Y.data && Y.data.units) || [];
       let pts = 0;
       let sitting = 0;
+      const byDays = [0, 0, 0, 0];
       for (const u of units) {
-        const m = store.mastery(u.id) || 0;
-        pts += m;
-        if (m >= 0.85) sitting++;
+        const i = store.masteryInfo(u.id);
+        if (!i) continue;
+        pts += i.acc * store.LEVEL_W[i.days] * i.fade;
+        byDays[i.days]++;
+        if (i.score >= 0.85) sitting++;
       }
       let known = 0;
       for (const k in S.srs) if (S.srs[k].b >= 3) known++;
@@ -150,12 +155,12 @@
       const level = Math.min(10, Math.floor(frac * 10) + 1);
       const toNext = level >= 10 ? 0 : (level / 10) * total - pts;
       const inLevel = level >= 10 ? 1 : frac * 10 - (level - 1);
-      return { pts, total, sitting, known, level, toNext, inLevel };
+      return { pts, total, sitting, known, level, toNext, inLevel, byDays };
     },
     /* The latest snapshot from at least `days` days ago; failing that, the earliest one from before today. */
     snapBefore(days) {
       const t = today();
-      const keys = Object.keys(S.snap || {}).map(Number).sort((a, b) => a - b);
+      const keys = Object.keys((S.snapV === 2 && S.snap) || {}).map(Number).sort((a, b) => a - b);
       const old = keys.filter((k) => k <= t - days);
       const k = old.length ? old[old.length - 1] : keys.find((x) => x < t);
       return k === undefined ? null : { day: k, ago: t - k, pts: S.snap[k][0], sitting: S.snap[k][1], known: S.snap[k][2] };
@@ -268,7 +273,7 @@
       S.read = Object.assign({}, r.read, S.read);
       if (!S.acc) S.acc = {};
       for (const d in r.acc || {}) { const a = S.acc[d]; const b = r.acc[d]; S.acc[d] = a ? a.map((x, i) => Math.max(x, b[i] || 0)) : b; }
-      S.snap = newer ? Object.assign({}, S.snap, r.snap) : Object.assign({}, r.snap, S.snap);
+      if (r.snapV === 2) { if (S.snapV !== 2) { S.snap = {}; S.snapV = 2; } S.snap = newer ? Object.assign({}, S.snap, r.snap) : Object.assign({}, r.snap, S.snap); }
       for (const k in r.best || {}) S.best[k] = Math.max(S.best[k] || 0, r.best[k]);
       S.lastExport = Math.max(S.lastExport || 0, r.lastExport || 0);
       if (!S.track) S.track = {};
