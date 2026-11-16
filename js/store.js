@@ -4,7 +4,7 @@
   const KEY = 'yivo.v1';
   const INTERVALS = [0, 1, 3, 7, 16, 35, 90];
 
-  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, personal: [], lastExport: 0, read: {}, flags: [], track: {}, acc: {}, snap: {}, settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
+  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, personal: [], lastExport: 0, read: {}, flags: [], track: {}, acc: {}, snap: {}, gerr: {}, settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
 
   let S = blank();
   try {
@@ -116,6 +116,14 @@
           if (S.mistakes.length > 80) S.mistakes.pop();
         }
       }
+      // gender of a noun: count misses, so the words that keep going wrong can be drilled on their own
+      const gk = item.gkey || (item.srs && item.srs.startsWith('g:') ? item.srs : null);
+      if (gk) {
+        if (!S.gerr) S.gerr = {};
+        const e = S.gerr[gk] || { m: 0, r: 0 };
+        if (correct) e.r++; else { e.m++; e.r = 0; }
+        if (e.m) S.gerr[gk] = e;
+      }
       // first-attempt accuracy per day: [answers, right, produced (typed or built), produced right]
       if (!S.acc) S.acc = {};
       const ac = S.acc[t] || [0, 0, 0, 0];
@@ -178,6 +186,9 @@
       }
       return { n: sum[0], acc: sum[0] ? sum[1] / sum[0] : null, pn: sum[2], pacc: sum[2] ? sum[3] / sum[2] : null, days };
     },
+
+    /* Stubborn: missed at least twice, and not yet answered right three times in a row since. */
+    isStubborn(gk) { const e = (S.gerr || {})[gk]; return !!e && e.m >= 2 && e.r < 3; },
 
     streak() {
       let t = today();
@@ -271,6 +282,8 @@
       if (newer) S.mistakes = r.mistakes || [];
       S.diag = r.diag || S.diag ? (newer ? Object.assign({}, S.diag, r.diag) : Object.assign({}, r.diag, S.diag)) : null;
       S.read = Object.assign({}, r.read, S.read);
+      if (!S.gerr) S.gerr = {};
+      for (const k in r.gerr || {}) { const a = S.gerr[k]; const b = r.gerr[k]; if (!a || b.m > a.m || (b.m === a.m && newer)) S.gerr[k] = b; }
       if (!S.acc) S.acc = {};
       for (const d in r.acc || {}) { const a = S.acc[d]; const b = r.acc[d]; S.acc[d] = a ? a.map((x, i) => Math.max(x, b[i] || 0)) : b; }
       if (r.snapV === 2) { if (S.snapV !== 2) { S.snap = {}; S.snapV = 2; } S.snap = newer ? Object.assign({}, S.snap, r.snap) : Object.assign({}, r.snap, S.snap); }

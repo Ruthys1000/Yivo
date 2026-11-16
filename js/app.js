@@ -502,7 +502,7 @@
         <div class="row"><a class="btn" href="#/daily">${done ? 'עוד סשן' : 'להתחיל'}</a></div>
       </div>
 
-      <p class="alt-links">או ישר אל: <a href="#/unit/${nu.id}">הנושא הבא · ${Y.inline(nu.title)}</a><a href="#/track"><span class="yi">דער · די · דאָס</span> מההתחלה</a><a href="#/practice">תרגול חופשי</a></p>`}
+      <p class="alt-links">או ישר אל: <a href="#/unit/${nu.id}">הנושא הבא · ${Y.inline(nu.title)}</a><a href="#/gender">המין: <span class="yi">דער · די · דאָס</span></a><a href="#/practice">תרגול חופשי</a></p>`}
 
       <a class="card levelcard" href="#/progress">
         <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><b>דרגה ${lv.level} <small>מתוך 10</small></b><small>${lv.level >= 10 ? 'הדרגה הגבוהה ביותר' : pct(lv.inLevel) + '% בדרך לדרגה ' + (lv.level + 1)}</small></div>
@@ -689,7 +689,8 @@
         <div class="row"><a class="btn" href="#/daily">להתחיל</a></div>
       </div>
       <div class="grid" style="margin-top:12px">
-        <a class="tile" href="#/track"><b><span class="yi">דער · די · דאָס</span> מההתחלה</b><small>מסלול בצעדים קטנים: שש מילים בכל פעם</small></a>
+        <a class="tile" href="#/gender"><span class="num">${G.stubborn().length || ''}</span><b>המין: <span class="yi">דער · די · דאָס</span></b><small>חוקים, נטיות, ומילים בלי סימן שש בכל פעם. מיון לשלוש מגירות.</small></a>
+        <a class="tile" href="#/track"><b>מהמין אל התואר והיחסות</b><small>מסלול בצעדים: תואר, <span class="yi">דעם</span>, מילות יחס</small></a>
         <a class="tile" href="#/mistakes"><span class="num">${mist || ''}</span><b>הטעויות שלי</b><small>חזרה על שאלות שטעית בהן</small></a>
         <a class="tile" href="#/personal"><span class="num">${(S.state.personal || []).length || ''}</span><b>התרגילים שלי</b><small>${(S.state.personal || []).length ? 'נבנו מתיקונים בטקסטים שכתבת' : 'ייבנו מתיקונים בבודק הכתיב ואצל המורה'}</small></a>
       </div>
@@ -728,7 +729,10 @@
     for (const d of D.decks) for (const w of d.words) { const s = S.srs('v:' + w.y); if (s && s.d <= t) due.push([d.id, w]); }
     for (const [did, w] of Y.shuffle(due).slice(0, 3)) warm.push(G.vocab(did, w));
     if (!due.length) warm.push(G.vocab(Y.pick(D.decks).id));
-    warm.push(...genItems(['gender'], 1, 'b1'));
+    // gender: the words she keeps missing come first; otherwise one noun that is due
+    const stub = Y.shuffle(G.stubborn()).slice(0, 2);
+    if (stub.length) warm.push(...stub.map((n) => G.genderOf(n)));
+    else warm.push(...genItems(['gender'], 1, 'b1'));
 
     // 2. the new thing: the next step of the next unit, if it still has steps to go
     const nu = nextUnit();
@@ -1332,7 +1336,7 @@
     const [a, b, c] = parts;
     document.querySelectorAll('#nav a').forEach((n) => {
       const on = n.dataset.r === a || (n.dataset.r === 'home' && a === 'progress') || (n.dataset.r === 'learn' && ['unit', 'diag', 'read'].includes(a)) ||
-        (n.dataset.r === 'practice' && ['drill', 'daily', 'mistakes', 'blitz', 'personal'].includes(a)) ||
+        (n.dataset.r === 'practice' && ['drill', 'daily', 'mistakes', 'blitz', 'personal', 'track', 'gender'].includes(a)) ||
         (n.dataset.r === 'tools' && ['check', 'dict', 'lab', 'ai', 'ref', 'flags', 'review'].includes(a)) ||
         (n.dataset.r === 'words' && ['deck', 'mywords'].includes(a));
       n.classList.toggle('on', on);
@@ -1342,6 +1346,7 @@
     if (a === 'unit') return c === 'go' ? viewUnitGo(b) : c === 'steps' ? viewUnitSteps(b) : viewUnit(b);
     if (a === 'practice') return viewPractice();
     if (a === 'track') return Y.views.track(b, c);
+    if (a === 'gender') return Y.views.gender(b);
     if (a === 'drill') return viewDrill(b);
     if (a === 'daily') return viewDaily();
     if (a === 'personal') return runSession(Y.shuffle((S.state.personal || []).slice()).slice(0, 12).map((x) => Object.assign({}, x)), { back: '#/practice', again: '#/personal' });
