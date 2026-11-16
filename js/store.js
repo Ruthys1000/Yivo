@@ -4,7 +4,7 @@
   const KEY = 'yivo.v1';
   const INTERVALS = [0, 1, 3, 7, 16, 35, 90];
 
-  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, personal: [], lastExport: 0, read: {}, flags: [], track: {}, acc: {}, snap: {}, gerr: {}, settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
+  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, personal: [], lastExport: 0, read: {}, flags: [], track: {}, acc: {}, snap: {}, gerr: {}, gcheck: {}, settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
 
   let S = blank();
   try {
@@ -284,6 +284,8 @@
       S.read = Object.assign({}, r.read, S.read);
       if (!S.gerr) S.gerr = {};
       for (const k in r.gerr || {}) { const a = S.gerr[k]; const b = r.gerr[k]; if (!a || b.m > a.m || (b.m === a.m && newer)) S.gerr[k] = b; }
+      if (!S.gcheck) S.gcheck = {};
+      for (const d in r.gcheck || {}) S.gcheck[d] = Math.max(S.gcheck[d] || 0, r.gcheck[d]);
       if (!S.acc) S.acc = {};
       for (const d in r.acc || {}) { const a = S.acc[d]; const b = r.acc[d]; S.acc[d] = a ? a.map((x, i) => Math.max(x, b[i] || 0)) : b; }
       if (r.snapV === 2) { if (S.snapV !== 2) { S.snap = {}; S.snapV = 2; } S.snap = newer ? Object.assign({}, S.snap, r.snap) : Object.assign({}, r.snap, S.snap); }
