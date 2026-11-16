@@ -37,33 +37,56 @@
   const HEB = new Set(`חבֿר תּלמיד שכן ים ספֿר סידור חודש חלום טעם שׂכל כּוח סוף שבת יום־טובֿ מינהג נס אמת שלום כּבֿוד חילוק ענין טעות חשבון סדר דור מצבֿ אופֿן ניגון חדר
 כּלה שכנה לבֿנה חלה מתּנה דירה שעה מעשׂה חתונה משפּחה שׂימחה תּורה תּפֿילה מיצווה עבֿירה סיבה עצה שאלה תּשובֿה מלחמה מדינה קהילה סבֿיבֿה חכמה ברכה צרה נסיעה נשמה אמונה דאגה השפּעה ירושה
 פּנים מזל לשון קול רחמנות גלות`.split(/\s+/).map((w) => Y.canon(w)));
-  const genderWhy = (n) => {
+  /* kind: which rule (if any) explains the gender; text: the explanation shown to the learner. */
+  const genderInfo = (n) => {
     const w = Y.bare(n.w);
     const end = (s) => w.endsWith(Y.bare(s));
     if (HEB.has(Y.canon(n.w))) {
       const base = 'למילים מלשון־קודש אין מין אחד קבוע (לא כולן {דאָס}); המין נלמד עם המילה, אבל יש נטייה: ';
-      if (n.g === 'f' && end('ה')) return base + 'מילה שמסתיימת ב־{ה} היא לרוב {די}.';
-      if (n.g === 'n' && end('ות')) return base + 'מילה מופשטת שמסתיימת ב־{ות} היא לרוב {דאָס}.';
-      if (n.g === 'm') return base + 'מילה שאינה מסתיימת ב־{ה} היא לרוב {דער}.';
-      return base + 'זו אחת המילים שיוצאות מן הנטייה, וצריך לזכור אותה.';
+      if (n.g === 'f' && end('ה')) return { kind: 'heb-h', text: base + 'מילה שמסתיימת ב־{ה} היא לרוב {די}.' };
+      if (n.g === 'n' && end('ות')) return { kind: 'heb-ut', text: base + 'מילה מופשטת שמסתיימת ב־{ות} היא לרוב {דאָס}.' };
+      if (n.g === 'm' && !end('ה') && !end('ות')) return { kind: 'heb-m', text: base + 'מילה שאינה מסתיימת ב־{ה} היא לרוב {דער}.' };
+      return { kind: 'heb-x', text: base + 'זו אחת המילים שיוצאות מן הנטייה, וצריך לזכור אותה.' };
     }
-    if (n.c === 'p' && n.g !== 'n') return n.g === 'm' ? 'שם של זכר ← {דער}.' : 'שם של נקבה ← {די}.';
+    if (n.c === 'p' && n.g !== 'n') return n.g === 'm' ? { kind: 'male', text: 'שם של זכר ← {דער}.' } : { kind: 'female', text: 'שם של נקבה ← {די}.' };
     if (n.g === 'f') {
-      for (const s of ['ונג', 'קייט', 'הייט', 'שאַפֿט']) if (end(s) && w.length > 5) return `הסיומת {־${s}} ← תמיד {די}.`;
-      if (end('ע')) return 'מילה שמסתיימת ב־{ע} היא לרוב {די}.';
+      for (const s of ['ונג', 'קייט', 'הייט', 'שאַפֿט']) if (end(s) && w.length > 5) return { kind: 'suf', text: `הסיומת {־${s}} ← תמיד {די}.` };
+      if (end('ע')) return { kind: 'e', text: 'מילה שמסתיימת ב־{ע} היא לרוב {די}.' };
     }
     if (n.g === 'n') {
-      if (/(ל|עלע)$/.test(w) && w !== Y.bare('מויל')) return 'צורת הקטנה (־ל) ← תמיד {דאָס}, גם כשמדובר באדם.';
-      if (/^גע/.test(w) && w !== Y.bare('געלט')) return 'הרבה שמות עצם שמתחילים ב־{גע־} הם {דאָס}.';
-      if (D.verbs.some((v) => Y.canon(v.inf) === Y.canon(n.w))) return 'שם פועל שמשמש כשם עצם ← {דאָס}.';
+      if (/(ל|עלע)$/.test(w) && ![Y.bare('מויל'), Y.bare('מאָל'), Y.bare('געפֿיל')].includes(w)) return { kind: 'dim', text: 'צורת הקטנה (־ל) ← תמיד {דאָס}, גם כשמדובר באדם.' };
+      if (/^גע/.test(w) && w !== Y.bare('געלט')) return { kind: 'ge', text: 'הרבה שמות עצם שמתחילים ב־{גע־} הם {דאָס}.' };
+      if (D.verbs.some((v) => Y.canon(v.inf) === Y.canon(n.w))) return { kind: 'inf', text: 'שם פועל שמשמש כשם עצם ← {דאָס}.' };
     }
     if (n.g === 'm') {
-      if (['זומער', 'ווינטער', 'פֿרילינג', 'האַרבסט'].some((s) => Y.canon(s) === Y.canon(n.w))) return 'עונות השנה ← {דער}.';
-      if (n.c === 'p' && end('ער')) return 'בעל מקצוע ב־{ער} ← {דער}.';
+      if (['זומער', 'ווינטער', 'פֿרילינג', 'האַרבסט'].some((s) => Y.canon(s) === Y.canon(n.w))) return { kind: 'season', text: 'עונות השנה ← {דער}.' };
     }
-    return 'אין כאן סימן חיצוני, וזו לא טעות בהיגיון: את המין של המילה הזאת פשוט זוכרים. אמרי אותה בקול יחד עם התווית.';
+    return { kind: 'none', text: 'אין כאן סימן חיצוני, וזו לא טעות בהיגיון: את המין של המילה הזאת פשוט זוכרים. אמרי אותה בקול יחד עם התווית.' };
   };
-  G.genderWhy = genderWhy;
+  const genderWhy = (n) => genderInfo(n).text;
+  G.genderInfo = genderInfo;
+  G.nounKey = (n) => nounKey(n);
+  /* The noun with its article and, where it sounds natural, an adjective that is always the same for that noun. */
+  G.phraseOf = (n) => {
+    const art = Y.ART.nom[n.g];
+    if (n.irr || NOADJ.has(Y.canon(n.w))) return `${art} ${n.w}`;
+    const pool = { p: ['גוט'], o: ['שיין', 'גרויס', 'קליין'], a: ['גרויס', 'וויכטיק'] }[n.c] || [];
+    if (!pool.length) return `${art} ${n.w}`;
+    let h = 0;
+    for (const ch of n.w) h = (h * 31 + ch.codePointAt(0)) % 9973;
+    return `${art} ${Y.adj(pool[h % pool.length], n.g === 'm' ? 'er' : 'e')} ${n.w}`;
+  };
+  /* The plain "which article?" item for one noun. */
+  G.genderOf = (n) => {
+    const it = {
+      t: 'm', q: '___ ' + n.w, he: n.he, opts: ARTS, a: Y.ART.nom[n.g], fixed: true, unit: 'b1',
+      ex: `{${G.phraseOf(n)}} — ${GNAME[n.g]}. ${genderWhy(n)}`, key: nounKey(n), srs: nounKey(n),
+    };
+    if (n.alt) { it.also = [Y.ART.nom[n.alt]]; it.ex = `{${Y.ART.nom[n.g]} ${n.w}}, ובתקן מקובל גם {${Y.ART.nom[n.alt]} ${n.w}}. שתי התשובות נכונות.`; }
+    return it;
+  };
+  /* Nouns whose gender she keeps missing. */
+  G.stubborn = () => D.nouns.filter((n) => Y.store.isStubborn(nounKey(n)));
 
   G.gender = (mode) => {
     const n = pickSrs(D.nouns, nounKey);
