@@ -83,7 +83,7 @@
   Y.present = (stem, inf) => {
     const s = Y.unfinal(stem);
     const bareLast = stripMarks(Y.canon(stem)).slice(-1);
-    const du = bareLast === 'ס' ? s + 'ט' : s + 'סט';
+    const du = /[סזצץ]/.test(bareLast) ? s + 'ט' : s + 'סט';
     const er = bareLast === 'ט' ? stem : s + 'ט';
     // plural = stem + ־ן; a stem that ends in a vowel takes ־ען even where the infinitive is contracted (גיין ← מיר גייען, זען ← מיר זעען)
     const pl = /(יי|ע)$/.test(stripMarks(Y.canon(stem))) ? stem + 'ען' : inf;

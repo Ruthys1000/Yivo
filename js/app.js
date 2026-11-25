@@ -4,12 +4,14 @@
   const D = Y.data;
   const S = Y.store;
   const G = Y.gen;
+  const C = Y.course;
   const $app = document.getElementById('app');
   const esc = Y.esc;
   const ARTS = ['דער', 'די', 'דאָס'];
 
   const render = (html) => {
     $app.innerHTML = Y.disp(html);
+    wireTrack();
     window.scrollTo(0, 0);
   };
   const unitById = (id) => D.units.find((u) => u.id === id);
@@ -455,16 +457,25 @@
 
   /* ================= views ================= */
 
+  /* the units the current track works on: the course's lessons so far, or everything */
+  const trackUnits = () => { const cu = C.mode() === 'course' ? C.units() : []; return cu.length ? cu : D.units; };
   const nextUnit = () => {
     const diag = S.state.diag;
-    const started = D.units.find((u) => { const m = S.mastery(u.id); return m !== null && m < 0.85; });
+    const pool = trackUnits();
+    const started = pool.find((u) => { const m = S.mastery(u.id); return m !== null && m < 0.85; });
     if (started) return started;
     if (diag) {
-      const weak = D.units.find((u) => diag[u.id] === 0 && S.mastery(u.id) === null);
+      const weak = pool.find((u) => diag[u.id] === 0 && S.mastery(u.id) === null);
       if (weak) return weak;
     }
-    return D.units.find((u) => S.mastery(u.id) === null) || D.units[0];
+    return pool.find((u) => S.mastery(u.id) === null) || pool[0];
   };
+
+  /* the two-track switch: the course so far, or the whole app */
+  const trackSwitch = () => `<div class="seg" role="group" aria-label="מסלול">
+    <button type="button" data-track="course" aria-pressed="${C.mode() === 'course'}">הקורס</button>
+    <button type="button" data-track="full" aria-pressed="${C.mode() === 'full'}">האפליקציה המלאה</button></div>`;
+  const wireTrack = () => $app.querySelectorAll('[data-track]').forEach((b) => b.addEventListener('click', () => { C.set(b.dataset.track); route(); }));
 
   const allVocabKeys = () => D.decks.flatMap((d) => d.words.map((w) => w.y));
 
@@ -475,7 +486,7 @@
     const done = S.todayCount() >= S.GOAL;
     const due = dueTotal();
     const mist = S.state.mistakes.length;
-    const fresh = !S.state.diag && !hasProgress;
+    const fresh = !S.state.diag && !hasProgress && C.mode() === 'full';
     const backupOld = hasProgress && S.today() - (S.state.lastExport || 0) > 30 && Object.keys(S.state.srs).length > 60;
     const lv = S.standing();
     const was = S.snapBefore(7);
@@ -486,9 +497,13 @@
 
     render(`<div class="stack">
       <div>
+        ${trackSwitch()}
         <h1><span class="yi">שלום־עליכם!</span></h1>
         <p class="lead">${fresh ? 'את כבר מדברת יידיש. כאן לומדים את הכללים שמאחוריה, לפי התקן של ייִוואָ.' : done ? 'סיימת את היעד של היום.' : 'מה עושים היום?'}</p>
       </div>
+
+      ${C.mode() === 'course' && C.current() ? `<a class="card levelcard" href="#/course"><small>הקורס · ${C.lessons().length} שיעורים פתוחים</small>
+        <b>שיעור ${C.current().n} · ${esc(C.current().title)}</b><br><small>${esc(C.current().sub)} · לשיעורים, למילים ולטקסטים ←</small></a>` : ''}
 
       ${fresh ? `
       <div class="card hero stack">
@@ -502,6 +517,7 @@
         <div class="row"><a class="btn" href="#/daily">${done ? 'עוד סשן' : 'להתחיל'}</a></div>
       </div>
 
+
       <p class="alt-links">או ישר אל: <a href="#/unit/${nu.id}">הנושא הבא · ${Y.inline(nu.title)}</a><a href="#/gender">המין: <span class="yi">דער · די · דאָס</span></a><a href="#/practice">תרגול חופשי</a></p>`}
 
       <a class="card levelcard" href="#/progress">
@@ -514,7 +530,7 @@
         <div class="stats">
           <div class="stat"><b>${S.streak()}</b><span>ימים ברצף</span></div>
           <div class="stat"><b>${S.todayCount()}<small style="font-size:.9rem;font-weight:600">/${S.GOAL}</small></b><span>היעד היומי</span></div>
-          <div class="stat"><b>${D.units.filter((u) => (S.mastery(u.id) || 0) >= 0.85).length}/${D.units.length}</b><span>יחידות יושבות</span></div>
+          <div class="stat"><b>${trackUnits().filter((u) => (S.mastery(u.id) || 0) >= 0.85).length}/${trackUnits().length}</b><span>יחידות יושבות</span></div>
         </div>
         <div class="bar" style="margin-top:14px" title="היעד היומי"><i style="width:${Math.min(100, (S.todayCount() / S.GOAL) * 100)}%"></i></div>
       </div>
@@ -539,7 +555,8 @@
   }
 
   function viewLearn() {
-    render(`<h1>מסלול הלימוד</h1>
+    if (C.mode() === 'course') return viewCourse();
+    render(`${trackSwitch()}<h1>מסלול הלימוד</h1>
       <p class="lead">${D.units.length} יחידות. בכל אחת הסבר קצר, השוואה ליידיש מהבית, ותרגול. אפשר ללמוד לפי הסדר או לקפוץ לנושא שעלה בשיעור.</p>
       ${D.groups.map((g) => `
         <div class="group-head"><h2>${esc(g.title)}</h2><small>${esc(g.blurb)}</small></div>
@@ -550,6 +567,33 @@
       <ul class="units">${D.texts.map((t) => `
         <li><a href="#/read/${t.id}"><span class="t"><b><span class="yi">${esc(t.title)}</span></b><small>${esc(t.he)} · ${esc(t.level)}</small></span>${S.state.read && S.state.read[t.id] ? '<span class="badge done">נקרא</span>' : '<span class="badge">חדש</span>'}</a></li>`).join('')}
       </ul>`);
+  }
+
+  /* the course track: one card per lesson taught so far, with its units, words and texts */
+  function viewCourse(n) {
+    const ls = C.lessons();
+    const one = n ? ls.find((l) => String(l.n) === n) : null;
+    const lessonCard = (l, full) => {
+      const units = l.units.map((id) => unitById(id)).filter(Boolean);
+      const deck = l.deck ? D.decks.find((d) => d.id === l.deck) : null;
+      const texts = C.texts(l.n);
+      return `<div class="card stack">
+        <div><small>שיעור ${l.n}${l === C.current() ? ' · האחרון שנלמד' : ''}</small><h2 style="margin:2px 0">${esc(l.title)}</h2><p class="lead" style="margin:0">${esc(l.sub)}</p></div>
+        ${units.length ? `<ul class="units">${units.map((u) => `<li><a href="#/unit/${u.id}"><span class="t"><b>${Y.inline(u.title)}</b><small>${Y.inline(u.sub)}</small></span>${badge(u.id)}</a></li>`).join('')}</ul>` : ''}
+        <div class="row">
+          ${deck ? `<a class="btn small" href="#/deck/${deck.id}">מילים · ${deck.words.length}</a>` : ''}
+          ${full ? '' : `<a class="btn ghost small" href="#/course/${l.n}">לדף השיעור</a>`}
+        </div>
+        ${texts.length ? `<ul class="units">${texts.map((t) => `<li><a href="#/read/${t.id}"><span class="t"><b><span class="yi">${esc(t.title)}</span></b><small>${esc(t.he)}</small></span>${S.state.read && S.state.read[t.id] ? '<span class="badge done">נקרא</span>' : ''}</a></li>`).join('')}</ul>` : ''}
+      </div>`;
+    };
+    if (one) {
+      return render(`<a class="crumb" href="#/course">→ הקורס</a>${lessonCard(one, true)}`);
+    }
+    render(`${trackSwitch()}<h1>הקורס</h1>
+      <p class="lead">יידיש למתחילים, בר־אילן. ${ls.length} שיעורים פתוחים. כל שבוע מתווסף שיעור.</p>
+      <div class="stack" style="margin-top:16px">${ls.slice().reverse().map((l) => lessonCard(l, false)).join('')}</div>
+      <p class="note"><small>האפליקציה המלאה כוללת עוד נושאים, משחקים וכלים. אפשר לעבור אליה בכל רגע בלחיצה על "האפליקציה המלאה".</small></p>`);
   }
 
   function viewUnit(id) {
@@ -728,7 +772,7 @@
     const due = [];
     for (const d of D.decks) for (const w of d.words) { const s = S.srs('v:' + w.y); if (s && s.d <= t) due.push([d.id, w]); }
     for (const [did, w] of Y.shuffle(due).slice(0, 3)) warm.push(G.vocab(did, w));
-    if (!due.length) warm.push(G.vocab(Y.pick(D.decks).id));
+    if (!due.length) warm.push(G.vocab(Y.pick(C.mode() === 'course' && C.decks().length ? C.decks() : D.decks).id));
     // gender: the words she keeps missing come first; otherwise one noun that is due
     const stub = Y.shuffle(G.stubborn()).slice(0, 2);
     if (stub.length) warm.push(...stub.map((n) => G.genderOf(n)));
@@ -862,10 +906,11 @@
 
   function viewWords() {
     const my = S.state.mywords;
-    render(`<h1>מילים</h1>
+    const decks = C.mode() === 'course' ? C.decks() : D.decks;
+    render(`${trackSwitch()}<h1>מילים</h1>
       <p class="lead">אוצר מילים תקני וספרותי בחזרה מרווחת: מילה שידעת חוזרת אחרי כמה ימים, מילה שלא ידעת חוזרת מייד.</p>
       <div class="grid" style="margin-top:16px">
-        ${D.decks.map((d) => {
+        ${decks.map((d) => {
           const keys = d.words.map((w) => w.y);
           const due = S.dueCount('v:', keys);
           const known = S.knownCount('v:', keys);
@@ -1335,7 +1380,7 @@
     const parts = (location.hash || '#/home').replace(/^#\//, '').split('/');
     const [a, b, c] = parts;
     document.querySelectorAll('#nav a').forEach((n) => {
-      const on = n.dataset.r === a || (n.dataset.r === 'home' && a === 'progress') || (n.dataset.r === 'learn' && ['unit', 'diag', 'read'].includes(a)) ||
+      const on = n.dataset.r === a || (n.dataset.r === 'home' && a === 'progress') || (n.dataset.r === 'learn' && ['unit', 'diag', 'read', 'course'].includes(a)) ||
         (n.dataset.r === 'practice' && ['drill', 'daily', 'mistakes', 'blitz', 'personal', 'track', 'gender'].includes(a)) ||
         (n.dataset.r === 'tools' && ['check', 'dict', 'lab', 'ai', 'ref', 'flags', 'review'].includes(a)) ||
         (n.dataset.r === 'words' && ['deck', 'mywords'].includes(a));
@@ -1343,6 +1388,7 @@
       if (on) n.setAttribute('aria-current', 'page'); else n.removeAttribute('aria-current');
     });
     if (a === 'learn') return viewLearn();
+    if (a === 'course') return viewCourse(b);
     if (a === 'unit') return c === 'go' ? viewUnitGo(b) : c === 'steps' ? viewUnitSteps(b) : viewUnit(b);
     if (a === 'practice') return viewPractice();
     if (a === 'track') return Y.views.track(b, c);
