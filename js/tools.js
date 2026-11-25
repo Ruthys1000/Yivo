@@ -272,13 +272,16 @@
         <p class="lead">${esc(t.he)} · ${esc(t.level)}. הקישי על מילה לפירוש.</p>
         <div class="row" style="margin:12px 0">
           <button class="btn ghost small" id="xr" aria-pressed="${xray}">${xray ? 'להסתיר את הניתוח' : 'ניתוח דקדוקי'}</button>
-          <a class="btn small" href="#/read/${t.id}/q" id="rq">שאלות על הטקסט</a>
+          ${t.qs && t.qs.length ? `<a class="btn small" href="#/read/${t.id}/q" id="rq">שאלות על הטקסט</a>` : ''}
         </div>
         ${xray ? '<p class="legend"><i class="cell c-nom"></i>נאָמינאַטיוו <i class="cell c-acc"></i>אַקוזאַטיוו <i class="cell c-dat"></i>דאַטיוו</p>' : ''}
         <div class="reading${xray ? ' xray' : ''}">${t.body.split(/\n\n+/).map((p) => `<p>${para(p).replace(/\n/g, '<br>')}</p>`).join('')}</div>
+        ${t.trans ? `<details class="fold"><summary>תרגום לעברית</summary><div class="lesson">${esc(t.trans).replace(/\n/g, '<br>')}</div></details>` : ''}
         <div class="card winfo" id="winfo" hidden></div>`);
       document.querySelector('#xr').addEventListener('click', () => { xray = !xray; draw(); });
-      document.querySelector('#rq').addEventListener('click', (e) => {
+      if (!(t.qs && t.qs.length)) S.markRead(t.id);
+      const rq = document.querySelector('#rq');
+      if (rq) rq.addEventListener('click', (e) => {
         e.preventDefault();
         S.markRead(t.id);
         Y.ui.runSession(t.qs.map((q, i) => Object.assign(Y.gen.fromTuple(q, undefined, i), { key: 'r:' + t.id + ':' + i })), { back: '#/read/' + t.id });

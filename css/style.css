@@ -506,3 +506,8 @@ button.drawer:hover { background: color-mix(in srgb, currentColor 8%, var(--card
 .pick .tok:disabled { opacity: 1; }
 .rule-line { background: var(--card); border: 1px solid var(--line); border-inline-start: 5px solid currentColor; border-radius: 12px; padding: 10px 14px; margin-top: 10px; font-size: 1.05rem; }
 .rule-line .rl { color: var(--ink); }
+
+/* two-track switch: the course so far, or the whole app */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; margin-bottom: 10px; background: var(--card); }
+.seg button { font: inherit; font-size: .95rem; color: var(--muted); background: transparent; border: 0; padding: 6px 16px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }

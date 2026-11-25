@@ -4,7 +4,7 @@
   const KEY = 'yivo.v1';
   const INTERVALS = [0, 1, 3, 7, 16, 35, 90];
 
-  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, personal: [], lastExport: 0, read: {}, flags: [], track: {}, acc: {}, snap: {}, gerr: {}, gcheck: {}, settings: { strict: false, apiKey: '', model: 'claude-opus-5-5' } });
+  const blank = () => ({ units: {}, srs: {}, days: {}, mywords: [], mistakes: [], diag: null, best: {}, personal: [], lastExport: 0, read: {}, flags: [], track: {}, acc: {}, snap: {}, gerr: {}, gcheck: {}, settings: { strict: false, track: 'course', apiKey: '', model: 'claude-opus-5-5' } });
 
   let S = blank();
   try {
